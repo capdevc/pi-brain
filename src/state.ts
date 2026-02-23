@@ -6,6 +6,7 @@ import { parseYaml, serializeYaml } from "./yaml.js";
 interface LastCommit {
   branch: string;
   hash: string;
+  timestamp: string;
   summary: string;
 }
 
@@ -48,6 +49,7 @@ export class GccState {
       this.lastCommit = {
         branch: lc.branch ?? "",
         hash: lc.hash ?? "",
+        timestamp: lc.timestamp ?? "",
         summary: lc.summary ?? "",
       };
     }
@@ -57,8 +59,13 @@ export class GccState {
     this.activeBranch = branch;
   }
 
-  setLastCommit(branch: string, hash: string, summary: string): void {
-    this.lastCommit = { branch, hash, summary };
+  setLastCommit(
+    branch: string,
+    hash: string,
+    timestamp: string,
+    summary: string
+  ): void {
+    this.lastCommit = { branch, hash, timestamp, summary };
   }
 
   save(): void {
@@ -74,6 +81,7 @@ export class GccState {
       data.last_commit = {
         branch: this.lastCommit.branch,
         hash: this.lastCommit.hash,
+        timestamp: this.lastCommit.timestamp,
         summary: this.lastCommit.summary,
       };
     }

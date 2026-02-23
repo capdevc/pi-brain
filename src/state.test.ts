@@ -76,7 +76,12 @@ describe("gccState", () => {
     );
     const state = new GccState(tmpDir);
     state.load();
-    state.setLastCommit("main", "a1b2c3d4", "Decided on X");
+    state.setLastCommit(
+      "main",
+      "a1b2c3d4",
+      "2026-02-22T15:30:00Z",
+      "Decided on X"
+    );
     state.save();
 
     const reloaded = new GccState(tmpDir);
@@ -84,6 +89,7 @@ describe("gccState", () => {
     expect(reloaded.lastCommit).toStrictEqual({
       branch: "main",
       hash: "a1b2c3d4",
+      timestamp: "2026-02-22T15:30:00Z",
       summary: "Decided on X",
     });
   });

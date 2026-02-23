@@ -23,6 +23,12 @@
    - **Recovery:** If FAIL, fix all lint, formatting, deadcode, duplicate, or type errors before committing. The codebase must remain 100% clean at every commit.
 6. **Commit** only when all the above pass.
 
+**Lint constraints discovered during implementation:**
+
+- **Types in `types.ts`**: The `@factory/types-file-organization` rule requires all exported interfaces and types to live in `src/types.ts`. Do not define exported types inline in implementation files — add them to `src/types.ts` and re-export from the implementation module if needed.
+- **No immediate array mutation**: The `eslint-plugin-unicorn/no-immediate-mutation` rule disallows `push()` right after `const arr = []`. Initialize arrays with their first elements instead.
+- **Node.js imports allowed**: `eslint-plugin-import/no-nodejs-modules` is disabled for this project (Node.js extension).
+
 ---
 
 ## Phase 1: Foundation (State, File I/O, Init Script)
@@ -122,7 +128,7 @@ Include tests for:
 
 - Loading valid `state.yaml`
 - Loading when `state.yaml` is empty or malformed (should not crash, fallback to defaults)
-- Updating active branch and last commit
+- Updating active branch and last commit (including `timestamp`)
 - `GccState.isInitialized` logic
 
 **Step 2: Run test to verify it fails**
