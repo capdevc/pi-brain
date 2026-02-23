@@ -29,7 +29,9 @@
 
 ### Task 1: YAML Utility Module
 
-Minimal YAML serializer/deserializer for `state.yaml` and `metadata.yaml`.
+Minimal YAML serializer/deserializer for `state.yaml`. Handles flat key-value pairs and one-level nested objects only — no list support. `metadata.yaml` is read/written as raw text (not through this parser), so list support is not needed.
+
+> **Note:** `vi.spyOn` cannot mock ESM module exports (e.g., `node:crypto`). All tests in this project must use pure-function testing with mock _data_, not module-level mocking. The hook extractor pattern (Tasks 13-15) already follows this — keep it consistent.
 
 **Files:**
 
@@ -146,7 +148,7 @@ Command: `git commit -m "feat: add GCC state manager"`
 - Create: `src/hash.test.ts`
 
 **Step 1: Write the failing tests**
-Assert output is exactly 8 lowercase hex chars. Do **not** assert strict uniqueness across 1000 random iterations (flaky with 32-bit hashes). Instead, add deterministic tests (e.g., mock `randomBytes` to verify hex formatting and call behavior).
+Assert output is exactly 8 lowercase hex chars. Do **not** assert strict uniqueness across 1000 random iterations (flaky with 32-bit hashes). Do **not** use `vi.spyOn` on ESM module exports (it throws `Cannot redefine property` in ESM). Instead, test observable behavior: format, length, and that successive calls produce varying output.
 
 **Step 2: Run test to verify it fails**
 Run: `pnpm run test -- src/hash.test.ts`
@@ -181,6 +183,8 @@ Include tests for:
 - `listBranches` safely ignores non-directories in `.gcc/branches/`.
 - `getLogTurnCount` accurately counts `^## Turn ` occurrences.
 - `getLatestCommit` safely handles empty `commits.md` or files with only a header.
+
+> **Note on `metadata.yaml`:** This file is agent-managed free-form content. The branch manager creates it as an empty file. It is read/written as raw text — not parsed through the YAML module. The `gcc_context` tool (Task 8) extracts segments via regex on the raw text.
 
 **Step 2: Run test to verify it fails**
 Run: `pnpm run test -- src/branches.test.ts`
@@ -328,7 +332,7 @@ Command: `git commit -m "feat: add AGENTS.md updater utility"`
 
 **Files:** `src/tools/gcc-context.ts`, `src/tools/gcc-context.test.ts`
 Implement read-only context retrieval. Test all 5 levels (`status`, `branch`, `commit`, `log`, `metadata`).
-**CRITICAL:** When extracting metadata segments, do not rely on indentation regex (which breaks on nested YAML). Extract everything from `^segment:` until the next top-level key (`^(?=[a-zA-Z0-9_-]+:)`) or EOF.
+**CRITICAL:** The `metadata` level reads `metadata.yaml` as **raw text**, not through the YAML parser. When extracting segments, do not rely on indentation regex (which breaks on nested YAML). Extract everything from `^segment:` until the next top-level key (`^(?=[a-zA-Z0-9_-]+:)`) or EOF. This is intentional — `metadata.yaml` contains arbitrary agent-written content that may exceed the YAML parser's flat/one-level subset.
 **Verification:** `pnpm run test -- src/tools/gcc-context.test.ts` then `pnpm run check`. Commit.
 
 ### Task 9: `gcc_branch` Tool
@@ -476,6 +480,8 @@ Replace the scaffold.
 - Wire `before_agent_start` to `buildContextInjection`.
 - Wire `agent_end` to `commitFlow.handleAgentEnd`. If it returns data, call `finalizeGccCommit` and `pi.sendMessage` with `deliverAs: "followUp"`.
 - Wire `session_start`, `session_shutdown`, `session_before_compact`, and `resources_discover`.
+
+> **Deferred: Session tracking.** The spec originally called for `session_start` to register sessions in `state.yaml`. This is deferred for v1 because the YAML parser does not support lists and no tool or hook depends on session tracking data. The `session_start` hook should only check for `.gcc/` and display a notification with current GCC state — no state.yaml writes.
 
 **Step 4: Run Typecheck and Tests**
 Run: `pnpm run test -- src/index.test.ts`

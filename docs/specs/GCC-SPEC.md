@@ -318,13 +318,9 @@ last_commit:
   hash: a1b2c3d4
   timestamp: "2026-02-22T15:30:00Z"
   summary: "Decided on event sourcing for state sync"
-sessions:
-  - file: "~/.pi/agent/sessions/--project--/2026-02-22T14-00-00.jsonl"
-    branch: main
-    started: "2026-02-22T14:00:00Z"
 ```
 
-The `sessions` list provides a lightweight reference linking pi sessions to GCC branches. This is informational — the extension records which session was active during which branch period, enabling drill-down to raw session data if needed.
+> **Deferred (v1):** The original design included a `sessions` list in `state.yaml` linking pi sessions to GCC branches. This is deferred because: (a) it requires YAML list serialization, which adds complexity to the minimal YAML parser for an informational-only feature, and (b) no tool or hook depends on session tracking data. Can be added in a future version with a full YAML library if needed.
 
 ---
 
@@ -366,8 +362,9 @@ At the start of each agent turn cycle (after user sends a prompt), the extension
 When a new pi session starts:
 
 1. Check for `.gcc/` directory
-2. If present, register this session in `state.yaml`
-3. Display notification with current GCC state
+2. If present, display notification with current GCC state
+
+> **Note:** Session-to-branch tracking in `state.yaml` is deferred for v1. See section 5.
 
 ### 6.4 `session_shutdown` — Safety Net
 
@@ -626,6 +623,7 @@ pi install git:github.com/<user>/pi-gcc
 - GCC diff/blame (version history is in commits.md, not per-line tracking)
 - Remote GCC sync beyond git push/pull of `.gcc/` directory
 - GUI/TUI visualization of GCC branch history
+- Session-to-branch tracking in `state.yaml` (informational; no tool depends on it)
 
 ---
 
