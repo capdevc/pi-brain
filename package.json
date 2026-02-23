@@ -1,0 +1,49 @@
+{
+  "name": "pi-gcc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint -c .oxlintrc.json",
+    "lint:fix": "oxlint -c .oxlintrc.json --fix",
+    "format": "oxfmt --config .oxfmtrc.jsonc",
+    "format:check": "oxfmt --config .oxfmtrc.jsonc --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "deadcode": "knip",
+    "duplicates": "jscpd src/",
+    "secrets": "gitleaks detect --source . --no-git",
+    "check": "bash scripts/check.sh",
+    "fix": "bash scripts/fix.sh",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.48"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-ai": "^0.54.2",
+    "@mariozechner/pi-coding-agent": "^0.54.2",
+    "@mariozechner/pi-tui": "^0.54.2",
+    "@types/node": "^25.3.0",
+    "gitleaks": "^1.0.0",
+    "husky": "^9.1.7",
+    "jscpd": "^4.0.8",
+    "knip": "^5.85.0",
+    "lint-staged": "^16.2.7",
+    "oxfmt": "^0.35.0",
+    "oxlint": "^1.50.0",
+    "typescript": "^5.9.3",
+    "ultracite": "^7.2.3",
+    "vitest": "^4.0.18"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
