@@ -90,25 +90,19 @@ describe("integration", () => {
       const logAfterCommit = branches.readLog("phase-3-hooks");
       expect(logAfterCommit).toBe("");
 
-      const statusView = executeGccContext(
-        { level: "status" },
-        state,
-        branches,
-        projectDir
-      );
+      const statusView = executeGccContext({}, state, branches, projectDir);
       expect(statusView).toContain("phase-3-hooks");
       expect(statusView).toContain(
         "Added ota-logger/context-injector and verified behavior."
       );
 
-      const branchView = executeGccContext(
+      const ignoredLevelView = executeGccContext(
         { level: "branch", branch: "phase-3-hooks" },
         state,
         branches,
         projectDir
       );
-      expect(branchView).toContain("Latest Commit");
-      expect(branchView).toContain("This Commit's Contribution");
+      expect(ignoredLevelView).toContain("# GCC Status");
     } finally {
       fs.rmSync(projectDir, { recursive: true, force: true });
     }

@@ -74,7 +74,7 @@ export default function activate(pi: ExtensionAPI) {
   pi.registerTool({
     name: "gcc_context",
     label: "GCC Context",
-    description: "Retrieve GCC memory context at multiple levels.",
+    description: "Retrieve GCC memory status overview.",
     parameters: Type.Object({
       level: Type.Optional(Type.String()),
       branch: Type.Optional(Type.String()),
