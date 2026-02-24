@@ -426,7 +426,7 @@ Create mock `TurnEndEvent` data (plain objects matching the shapes above — no 
 Run: `pnpm run test -- src/ota-logger.test.ts`
 
 **Step 3: Write implementation**
-Implement `extractOtaInput`. Guard `message.role === "assistant"`. Iterate `message.content` filtering by `type` field (`"text"`, `"thinking"`, `"toolCall"`). Process `toolResults` separately.
+Implement `extractOtaInput`. Guard `message.role === "assistant"`. Treat `message.content` as `unknown` at runtime and normalize to an array of typed content items before filtering by `type` (`"text"`, `"thinking"`, `"toolCall"`). Process `toolResults` separately.
 
 **Step 4: Run test to verify it passes**
 Run: `pnpm run test -- src/ota-logger.test.ts`
@@ -516,7 +516,7 @@ Test extraction against mock assistant messages containing `TextContent` items w
 Run: `pnpm run test -- src/commit-flow.test.ts`
 
 **Step 3: Write implementation**
-Implement `CommitFlowManager`.
+Implement `CommitFlowManager`. Treat `AgentMessage.content` as `unknown` at runtime and safely extract assistant text blocks only from array content with `{ type: "text", text: string }` items.
 
 **Step 4: Run test to verify it passes**
 Run: `pnpm run test -- src/commit-flow.test.ts`
@@ -566,7 +566,7 @@ Replace the scaffold.
   - call `commitFlow.setPendingCommit(params.summary)` to arm step 2 extraction in `agent_end`
 - Wire `session_start`: create/load `state` and `branchManager` using `ctx.cwd`; show current GCC status via `ctx.ui.notify`.
 - Wire `session_shutdown`: if initialized, check for uncommitted turns and notify user.
-- Wire `session_before_compact`: if initialized, append a GCC state reminder to `event.customInstructions` (do not cancel/override compaction).
+- Wire `session_before_compact`: if initialized, append a GCC state reminder to `event.customInstructions` (do not cancel/override compaction). Treat this as best-effort: if the runtime does not honor in-place event mutation, this hook is effectively a no-op for v1.
 - Wire `resources_discover`: return GCC skill path using ESM-safe path resolution (`fileURLToPath(import.meta.url)` + `path.dirname(...)`), not `__dirname`.
 
 > **Deferred: Session tracking.** The spec originally called for `session_start` to register sessions in `state.yaml`. This is deferred for v1 because the YAML parser does not support lists and no tool or hook depends on session tracking data. The `session_start` hook should only check for `.gcc/` and display a notification with current GCC state — no state.yaml writes.
@@ -613,13 +613,24 @@ Command: `git commit -m "test: add module integration tests"`
 
 ### Task 18: Manual Integration Test
 
-Test the full extension end-to-end interactively.
+Test the full extension end-to-end.
+
+**Interactive mode (preferred):**
 
 1. Start pi: `pi -e ./src/index.ts`
 2. Ask the agent to initialize GCC. Verify `.gcc/` is created and AGENTS.md is updated.
 3. Have the agent perform some tool calls. Verify `log.md` populates.
 4. Ask the agent to run `gcc_commit` with a summary. Verify it completes the 2-step flow.
 5. Exit pi and restart. Verify the GCC notification appears on load.
+
+**Non-UI mode fallback (`-p` / `--mode json`):**
+
+If UI notifications are not visible (print/RPC mode), verify equivalent behavior using observable artifacts:
+
+1. Confirm `.gcc/` files and AGENTS.md updates on disk.
+2. Confirm `log.md` receives OTA entries after tool activity.
+3. Confirm `gcc_commit` finalizes: commit appended to `commits.md`, `log.md` cleared, `state.yaml.last_commit` updated.
+4. Confirm restart context injection by observing `before_agent_start` emits `customType: "gcc_context_injection"` with active branch + latest commit summary.
 
 ---
 

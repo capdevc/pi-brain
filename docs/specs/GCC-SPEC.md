@@ -343,6 +343,8 @@ After each agent turn, the extension receives a `TurnEndEvent`:
 
 The `AssistantMessage` contains `content: (TextContent | ThinkingContent | ToolCall)[]`, plus `provider`, `model`, and `timestamp` (epoch ms). Tool results are separate in `toolResults`, each with `toolName`, `content`, `details`, and `isError`.
 
+Runtime note: because `TurnEndEvent.message` is typed as `AgentMessage` (a union that includes custom messages), implementations should treat `message.content` as `unknown` and normalize it defensively before filtering by `type`.
+
 The extension:
 
 1. Guards that `message.role === "assistant"` (skips non-assistant messages)
@@ -404,6 +406,8 @@ When a new pi session starts:
 2. If present, display notification with current GCC state
 
 > **Note:** Session-to-branch tracking in `state.yaml` is deferred for v1. See section 5.
+>
+> **Non-UI mode note:** In print/RPC mode (`-p`, `--mode json`), `ctx.ui.notify(...)` may not be visible to users. Verification should rely on observable filesystem changes and context injection events instead of UI notifications.
 
 ### 6.4 `session_shutdown` — Safety Net
 
@@ -439,7 +443,7 @@ The extension:
    `"GCC memory system active on branch '<name>'. N uncommitted turns in .gcc/branches/<name>/log.md. Latest commit: <summary>."`
    This helps the compaction summary retain awareness of GCC state.
 
-> **Note:** The extension does not provide a custom `compaction` result and does not cancel compaction. It only mutates `event.customInstructions` (when present) to add a GCC reminder.
+> **Note:** The extension does not provide a custom `compaction` result and does not cancel compaction. It only mutates `event.customInstructions` (when present) to add a GCC reminder. This is a best-effort integration point; if runtime internals stop honoring in-place event mutation, this hook becomes a no-op in v1.
 
 ### 6.6 `resources_discover` — Skill Registration
 
@@ -479,6 +483,7 @@ The 2-step commit flow spans the `gcc_commit` tool and the `agent_end` hook:
 1. **`gcc_commit` tool execute:** Calls `executeGccCommit(params, state, branches)` to get log content. Also calls `commitFlow.setPendingCommit(params.summary)` to arm the flow. Returns log content to the agent.
 2. **Agent responds** with the three commit blocks (`### Branch Purpose`, etc.).
 3. **`agent_end` hook:** Calls `commitFlow.handleAgentEnd(event.messages)`. If it returns `{ summary, commitContent }`, calls `finalizeGccCommit(summary, commitContent, state, branches, projectDir)` to write the commit.
+   - Runtime note: `AgentMessage.content` can be non-array for custom messages; extraction must defensively normalize content and only read assistant text blocks.
 4. **Notification:** After finalization, calls `ctx.ui.notify("GCC commit written: <hash>", "info")` to inform the user. Does NOT use `pi.sendMessage({ deliverAs: "followUp" })` because the agent has already finished — a follow-up message would trigger an unnecessary extra turn. A UI notification is sufficient.
 
 ### 6.9 Tool Execute Wrapper Pattern
