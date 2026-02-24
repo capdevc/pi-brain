@@ -27,6 +27,9 @@
 
 - **Types in `types.ts`**: The `@factory/types-file-organization` rule requires all exported interfaces and types to live in `src/types.ts`. Do not define exported types inline in implementation files — add them to `src/types.ts` and re-export from the implementation module if needed.
 - **No immediate array mutation**: The `eslint-plugin-unicorn/no-immediate-mutation` rule disallows `push()` right after `const arr = []`. Initialize arrays with their first elements instead.
+- **No relative parent imports**: The `eslint-plugin-import/no-relative-parent-imports` rule prevents subdirectory organization (e.g., `src/tools/`, `src/hooks/`). All source files must be flat in `src/`. Use descriptive file names: `src/gcc-context.ts`, `src/ota-logger.ts`, `src/commit-flow.ts`, etc.
+- **No use before define**: Helper functions must be defined above the main exported function. Structure files as: helpers first, then builders, then the public `execute*` / `build*` function last.
+- **No dead re-exports**: Re-exporting types from implementation files (e.g., `export type { X } from "./types.js"`) triggers knip dead-code detection if nobody imports via that path. Import types directly from `src/types.ts`.
 - **Node.js imports allowed**: `eslint-plugin-import/no-nodejs-modules` is disabled for this project (Node.js extension).
 
 ---
@@ -349,22 +352,22 @@ Implement branch creation. Test for success and duplicate branch rejection.
 
 ### Task 10: `gcc_switch` Tool
 
-**Files:** `src/tools/gcc-switch.ts`, `src/tools/gcc-switch.test.ts`
+**Files:** `src/gcc-switch.ts`, `src/gcc-switch.test.ts`
 Implement branch switching. Test success and nonexistent branch rejection.
-**Verification:** `pnpm run test -- src/tools/gcc-switch.test.ts` then `pnpm run check`. Commit.
+**Verification:** `pnpm run test -- src/gcc-switch.test.ts` then `pnpm run check`. Commit.
 
 ### Task 11: `gcc_commit` Tool
 
-**Files:** `src/tools/gcc-commit.ts`, `src/tools/gcc-commit.test.ts`
+**Files:** `src/gcc-commit.ts`, `src/gcc-commit.test.ts`
 Implement the 2-step commit process logic (`executeGccCommit` for prompt, `finalizeGccCommit` for writing). Uses `updateRootAgentsMd`.
-**Verification:** `pnpm run test -- src/tools/gcc-commit.test.ts` then `pnpm run check`. Commit.
+**Verification:** `pnpm run test -- src/gcc-commit.test.ts` then `pnpm run check`. Commit.
 
 ### Task 12: `gcc_merge` Tool
 
-**Files:** `src/tools/gcc-merge.ts`, `src/tools/gcc-merge.test.ts`
+**Files:** `src/gcc-merge.ts`, `src/gcc-merge.test.ts`
 Implement merging. Reject merging into self, reject missing branches. Uses `updateRootAgentsMd`.
 **CRITICAL:** Ignore the spec's requirement that the tool "automatically call gcc*context". It is logically impossible since the user must provide `synthesis` upfront. Instead, update `SKILL.md` (in Task 6) to instruct the agent: *"Always call `gcc_context --branch <target>` to review the history BEFORE calling `gcc_merge`."\_
-**Verification:** `pnpm run test -- src/tools/gcc-merge.test.ts` then `pnpm run check`. Commit.
+**Verification:** `pnpm run test -- src/gcc-merge.test.ts` then `pnpm run check`. Commit.
 
 ---
 
@@ -378,20 +381,20 @@ Extracts `TurnEndEvent` processing logic.
 
 **Files:**
 
-- Create: `src/hooks/ota-logger.ts`
-- Create: `src/hooks/ota-logger.test.ts`
+- Create: `src/ota-logger.ts`
+- Create: `src/ota-logger.test.ts`
 
 **Step 1: Write the failing tests**
 Mock a `TurnEndEvent` payload (import types from `@mariozechner/pi-coding-agent`). Test `extractOtaInput(event)` returns correct `OtaEntryInput` or `null` if no meaningful content exists (e.g., UI notifications).
 
 **Step 2: Run test to verify it fails**
-Run: `pnpm run test -- src/hooks/ota-logger.test.ts`
+Run: `pnpm run test -- src/ota-logger.test.ts`
 
 **Step 3: Write implementation**
 Implement `extractOtaInput`.
 
 **Step 4: Run test to verify it passes**
-Run: `pnpm run test -- src/hooks/ota-logger.test.ts`
+Run: `pnpm run test -- src/ota-logger.test.ts`
 
 **Step 5: Run checks and Commit**
 Run: `pnpm run check`
@@ -405,20 +408,20 @@ Builds the system prompt addition.
 
 **Files:**
 
-- Create: `src/hooks/context-injector.ts`
-- Create: `src/hooks/context-injector.test.ts`
+- Create: `src/context-injector.ts`
+- Create: `src/context-injector.test.ts`
 
 **Step 1: Write the failing tests**
 Test `buildContextInjection(state, branches)` returns the correct markdown string based on current state.
 
 **Step 2: Run test to verify it fails**
-Run: `pnpm run test -- src/hooks/context-injector.test.ts`
+Run: `pnpm run test -- src/context-injector.test.ts`
 
 **Step 3: Write implementation**
 Implement `buildContextInjection`.
 
 **Step 4: Run test to verify it passes**
-Run: `pnpm run test -- src/hooks/context-injector.test.ts`
+Run: `pnpm run test -- src/context-injector.test.ts`
 
 **Step 5: Run checks and Commit**
 Run: `pnpm run check`
@@ -432,8 +435,8 @@ Manages the 2-step commit flow state.
 
 **Files:**
 
-- Create: `src/hooks/commit-flow.ts`
-- Create: `src/hooks/commit-flow.test.ts`
+- Create: `src/commit-flow.ts`
+- Create: `src/commit-flow.test.ts`
 
 **Step 1: Write the failing tests**
 Test `CommitFlowManager`:
@@ -443,13 +446,13 @@ Test `CommitFlowManager`:
    Test extraction regex/logic against mock agent responses containing `### Branch Purpose`, etc.
 
 **Step 2: Run test to verify it fails**
-Run: `pnpm run test -- src/hooks/commit-flow.test.ts`
+Run: `pnpm run test -- src/commit-flow.test.ts`
 
 **Step 3: Write implementation**
 Implement `CommitFlowManager`.
 
 **Step 4: Run test to verify it passes**
-Run: `pnpm run test -- src/hooks/commit-flow.test.ts`
+Run: `pnpm run test -- src/commit-flow.test.ts`
 
 **Step 5: Run checks and Commit**
 Run: `pnpm run check`
@@ -481,7 +484,7 @@ _(or `pnpm run test -- src/index.wiring.test.ts` if split)_
 Replace the scaffold.
 
 - Declare `let state: GccState`, `let branchManager: BranchManager`, `const commitFlow = new CommitFlowManager()`.
-- Register 5 tools via `pi.registerTool` with `TypeBox` schemas. Tool executes delegate to `src/tools/*`.
+- Register 5 tools via `pi.registerTool` with `TypeBox` schemas. Tool executes delegate to `src/gcc-*.ts`.
 - Wire `turn_end` to `extractOtaInput` -> `formatOtaEntry` -> `branchManager.appendLog`.
 - Wire `before_agent_start` to `buildContextInjection`.
 - Wire `agent_end` to `commitFlow.handleAgentEnd`. If it returns data, call `finalizeGccCommit` and `pi.sendMessage` with `deliverAs: "followUp"`.
