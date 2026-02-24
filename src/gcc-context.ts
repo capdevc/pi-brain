@@ -39,12 +39,21 @@ function extractCommitByHash(commits: string, hash: string): string | null {
 }
 
 function extractCommitSummaryLine(commitEntry: string): string {
-  const contributionMatch = /### This Commit's Contribution\n\n(.+)/m.exec(
-    commitEntry
-  );
-  if (contributionMatch) {
-    return contributionMatch[1].slice(0, 100);
+  const marker = "### This Commit's Contribution";
+  const markerIndex = commitEntry.indexOf(marker);
+
+  if (markerIndex !== -1) {
+    const afterMarker = commitEntry.slice(markerIndex + marker.length);
+    const firstContentLine = afterMarker
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.length > 0);
+
+    if (firstContentLine) {
+      return firstContentLine.slice(0, 100);
+    }
   }
+
   const headerMatch = /## Commit ([a-f0-9]+)/.exec(commitEntry);
   if (headerMatch) {
     return `commit ${headerMatch[1]}`;
