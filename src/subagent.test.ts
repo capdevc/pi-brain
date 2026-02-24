@@ -1,4 +1,8 @@
-import { buildCommitterTask, extractFinalText } from "./subagent.js";
+import {
+  buildCommitterTask,
+  extractCommitBlocks,
+  extractFinalText,
+} from "./subagent.js";
 
 describe("buildCommitterTask", () => {
   it("builds task string with branch, summary, and file paths", () => {
@@ -93,5 +97,54 @@ describe("extractFinalText", () => {
     const result = extractFinalText(stdout);
     expect(result).toContain("Part one.");
     expect(result).toContain("Part two.");
+  });
+});
+
+describe("extractCommitBlocks", () => {
+  it("extracts three commit blocks from text", () => {
+    const text = [
+      "### Branch Purpose",
+      "Build the GCC extension for persistent agent memory.",
+      "",
+      "### Previous Progress Summary",
+      "Completed Phase 1 foundation: YAML parser, state manager, hash generator.",
+      "",
+      "### This Commit's Contribution",
+      "Added OTA formatter and branch manager modules with full test coverage.",
+    ].join("\n");
+
+    const result = extractCommitBlocks(text);
+    expect(result).toContain("### Branch Purpose");
+    expect(result).toContain("### Previous Progress Summary");
+    expect(result).toContain("### This Commit's Contribution");
+  });
+
+  it("strips preamble and trailing text", () => {
+    const text = [
+      "I've reviewed the log and here is the commit:",
+      "",
+      "### Branch Purpose",
+      "Build the GCC extension.",
+      "",
+      "### Previous Progress Summary",
+      "Phase 1 done.",
+      "",
+      "### This Commit's Contribution",
+      "Phase 2 tools implemented.",
+      "",
+      "Let me know if you want to adjust anything.",
+    ].join("\n");
+
+    const result = extractCommitBlocks(text);
+    expect(result).not.toContain("I've reviewed");
+    expect(result).not.toContain("Let me know");
+    expect(result).toContain("### Branch Purpose");
+  });
+
+  it("returns null when blocks are missing", () => {
+    expect(extractCommitBlocks("No commit blocks here.")).toBeNull();
+    expect(
+      extractCommitBlocks("### Branch Purpose\nOnly one block.")
+    ).toBeNull();
   });
 });

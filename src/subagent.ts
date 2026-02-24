@@ -49,6 +49,81 @@ export function extractFinalText(stdout: string): string {
   return lastText;
 }
 
+/**
+ * Extract the three commit blocks from subagent response text.
+ * Returns the text from "### Branch Purpose" through the end of
+ * "### This Commit's Contribution" content, stripping preamble
+ * and trailing prose.
+ */
+export function extractCommitBlocks(text: string): string | null {
+  const branchPurposeIndex = text.indexOf("### Branch Purpose");
+  if (branchPurposeIndex === -1) {
+    return null;
+  }
+
+  const progressIndex = text.indexOf("### Previous Progress Summary");
+  if (progressIndex === -1) {
+    return null;
+  }
+
+  const contributionIndex = text.indexOf("### This Commit's Contribution");
+  if (contributionIndex === -1) {
+    return null;
+  }
+
+  // Extract from "### Branch Purpose" onward
+  const fromStart = text.slice(branchPurposeIndex);
+  const lines = fromStart.split("\n");
+
+  // Find where "### This Commit's Contribution" starts, then collect
+  // content lines until we hit a blank line followed by non-content.
+  let inContribution = false;
+  let lastContentLine = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith("### This Commit's Contribution")) {
+      inContribution = true;
+      lastContentLine = i;
+      continue;
+    }
+
+    if (!inContribution) {
+      lastContentLine = i;
+      continue;
+    }
+
+    // In contribution block: keep content lines, stop at blank+non-blank
+    if (line.trim() === "") {
+      continue;
+    }
+
+    // Non-empty line in contribution section — is it still contribution content?
+    // If there was a blank line gap since lastContentLine, check if this
+    // looks like trailing prose (doesn't start with -, *, or indent).
+    const gapHasBlank = lines
+      .slice(lastContentLine + 1, i)
+      .some((l) => l.trim() === "");
+
+    if (
+      gapHasBlank &&
+      !line.startsWith("-") &&
+      !line.startsWith("*") &&
+      !line.startsWith(" ")
+    ) {
+      // Trailing text after the contribution block — stop here
+      break;
+    }
+
+    lastContentLine = i;
+  }
+
+  return lines
+    .slice(0, lastContentLine + 1)
+    .join("\n")
+    .trimEnd();
+}
+
 export function spawnCommitter(
   cwd: string,
   task: string,
