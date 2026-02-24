@@ -330,14 +330,30 @@ The extension hooks into pi's session lifecycle for three purposes: automatic OT
 
 ### 6.1 `turn_end` — OTA Logging
 
-After each agent turn, the extension:
+After each agent turn, the extension receives a `TurnEndEvent`:
 
-1. Extracts the assistant's text content (full, no truncation)
-2. Extracts thinking blocks (full, no truncation)
-3. Extracts tool calls (name + key arguments)
-4. Extracts tool results (name, success/fail, compact summary from `details`)
-5. Tags the entry with provider/model
-6. Appends the formatted OTA entry to the active branch's `log.md`
+```typescript
+{
+  type: "turn_end";
+  turnIndex: number;           // 0-based turn index
+  message: AgentMessage;       // The assistant's message (guard for role === "assistant")
+  toolResults: ToolResultMessage[];  // Tool results for this turn
+}
+```
+
+The `AssistantMessage` contains `content: (TextContent | ThinkingContent | ToolCall)[]`, plus `provider`, `model`, and `timestamp` (epoch ms). Tool results are separate in `toolResults`, each with `toolName`, `content`, `details`, and `isError`.
+
+The extension:
+
+1. Guards that `message.role === "assistant"` (skips non-assistant messages)
+2. Extracts text content from `TextContent` items in `message.content`
+3. Extracts thinking from `ThinkingContent` items in `message.content`
+4. Extracts tool calls from `ToolCall` items in `message.content` (name + key arguments)
+5. Extracts tool results from `toolResults` (name, success/fail, compact summary from `details`)
+6. Tags the entry with `message.provider/message.model`
+7. Uses `turnIndex + 1` for the display turn number
+8. Uses `new Date(message.timestamp).toISOString()` for the timestamp
+9. Appends the formatted OTA entry to the active branch's `log.md`
 
 Processing rules:
 
@@ -348,14 +364,37 @@ Processing rules:
 
 ### 6.2 `before_agent_start` — Context Injection
 
-At the start of each agent turn cycle (after user sends a prompt), the extension:
+At the start of each agent turn cycle (after user sends a prompt), the extension receives a `BeforeAgentStartEvent`:
 
-1. Checks if `.gcc/` exists in the project
-2. If yes, injects a context message containing:
+```typescript
+{
+  type: "before_agent_start";
+  prompt: string;
+  systemPrompt: string;
+}
+```
+
+The handler returns a `BeforeAgentStartEventResult` to inject context:
+
+```typescript
+{
+  message: {
+    customType: "gcc_context_injection",
+    content: "...",     // Markdown string with GCC state
+    display: false,     // Not shown in UI, only sent to LLM
+  }
+}
+```
+
+The extension:
+
+1. Checks if `.gcc/` exists in the project (via `state.isInitialized`)
+2. If yes, builds a context injection message containing:
    - Current branch name and purpose
    - Latest commit summary (the rolling progress summary from the most recent commit)
    - Any uncommitted log.md entries count ("12 turns since last commit")
-3. This ensures the agent always has GCC orientation without calling `gcc_context`
+3. Returns the message as a `BeforeAgentStartEventResult`
+4. This ensures the agent always has GCC orientation without calling `gcc_context`
 
 ### 6.3 `session_start` — Session Registration
 

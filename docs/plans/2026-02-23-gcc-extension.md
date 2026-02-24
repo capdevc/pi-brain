@@ -377,21 +377,56 @@ To ensure 100% testability, extension hook logic is extracted into pure function
 
 ### Task 13: OTA Logger Hook Extractor
 
-Extracts `TurnEndEvent` processing logic.
+Extracts `TurnEndEvent` processing logic into a pure function testable without the extension runtime.
 
 **Files:**
 
 - Create: `src/ota-logger.ts`
 - Create: `src/ota-logger.test.ts`
 
+**API shape (from `@mariozechner/pi-coding-agent`):**
+
+```typescript
+TurnEndEvent = {
+  type: "turn_end";
+  turnIndex: number;                    // 0-based
+  message: AgentMessage;                // Union — guard for role === "assistant"
+  toolResults: ToolResultMessage[];     // Separate from message.content
+}
+
+AssistantMessage = {
+  role: "assistant";
+  content: (TextContent | ThinkingContent | ToolCall)[];
+  provider: string;   // e.g. "anthropic"
+  model: string;      // e.g. "claude-sonnet-4-20250514"
+  timestamp: number;  // epoch ms
+}
+
+ToolResultMessage = {
+  role: "toolResult";
+  toolCallId: string;
+  toolName: string;
+  content: (TextContent | ImageContent)[];
+  details?: unknown;
+  isError: boolean;
+}
+```
+
 **Step 1: Write the failing tests**
-Mock a `TurnEndEvent` payload (import types from `@mariozechner/pi-coding-agent`). Test `extractOtaInput(event)` returns correct `OtaEntryInput` or `null` if no meaningful content exists (e.g., UI notifications).
+Create mock `TurnEndEvent` data (plain objects matching the shapes above — no need to import actual types for test data). Test `extractOtaInput(event)`:
+
+- Returns correct `OtaEntryInput` with `turnNumber = turnIndex + 1`, timestamp from `new Date(message.timestamp).toISOString()`, model as `provider/model`.
+- Extracts text from `TextContent` items, thinking from `ThinkingContent` items.
+- Extracts tool call summaries from `ToolCall` items in message content: `"name(key-arg)"`.
+- Extracts tool result summaries from `toolResults`: `"name: success/fail, detail"`.
+- Returns `null` when `message.role !== "assistant"` (e.g., custom messages).
+- Returns `null` when message has no text content and no tool calls (empty turn).
 
 **Step 2: Run test to verify it fails**
 Run: `pnpm run test -- src/ota-logger.test.ts`
 
 **Step 3: Write implementation**
-Implement `extractOtaInput`.
+Implement `extractOtaInput`. Guard `message.role === "assistant"`. Iterate `message.content` filtering by `type` field (`"text"`, `"thinking"`, `"toolCall"`). Process `toolResults` separately.
 
 **Step 4: Run test to verify it passes**
 Run: `pnpm run test -- src/ota-logger.test.ts`
@@ -404,21 +439,38 @@ Command: `git commit -m "feat: add OTA logger hook extractor"`
 
 ### Task 14: Context Injector Hook Extractor
 
-Builds the system prompt addition.
+Builds the context injection message for `before_agent_start`.
 
 **Files:**
 
 - Create: `src/context-injector.ts`
 - Create: `src/context-injector.test.ts`
 
+**API shape:** The `before_agent_start` handler returns a `BeforeAgentStartEventResult`:
+
+```typescript
+{
+  message?: {
+    customType: string;   // e.g. "gcc_context_injection"
+    content: string;      // Markdown with GCC state
+    display: boolean;     // false — injected into LLM context, not shown in UI
+    details?: unknown;
+  }
+}
+```
+
 **Step 1: Write the failing tests**
-Test `buildContextInjection(state, branches)` returns the correct markdown string based on current state.
+Test `buildContextInjection(state, branches)`:
+
+- Returns a result object with `message.content` containing active branch name, latest commit summary, and uncommitted turn count.
+- Returns `null` when GCC is not initialized (`state.isInitialized === false`).
+- Sets `message.display = false` and `message.customType = "gcc_context_injection"`.
 
 **Step 2: Run test to verify it fails**
 Run: `pnpm run test -- src/context-injector.test.ts`
 
 **Step 3: Write implementation**
-Implement `buildContextInjection`.
+Implement `buildContextInjection`. Return `null` if not initialized. Otherwise return the result object with a markdown content string.
 
 **Step 4: Run test to verify it passes**
 Run: `pnpm run test -- src/context-injector.test.ts`
@@ -438,12 +490,27 @@ Manages the 2-step commit flow state.
 - Create: `src/commit-flow.ts`
 - Create: `src/commit-flow.test.ts`
 
+**API shape:** The `agent_end` event provides the full conversation:
+
+```typescript
+AgentEndEvent = {
+  type: "agent_end";
+  messages: AgentMessage[];  // Full message array — not just the latest
+}
+```
+
+To find the agent's commit response, search the **last** `AssistantMessage` in the array (where `role === "assistant"`) for the `### Branch Purpose` / `### This Commit's Contribution` blocks.
+
 **Step 1: Write the failing tests**
 Test `CommitFlowManager`:
 
-1. `setPendingCommit(params)`
-2. `handleAgentEnd(messages)` returns extracted commit content and resets pending state.
-   Test extraction regex/logic against mock agent responses containing `### Branch Purpose`, etc.
+1. `setPendingCommit(summary)` — stores pending state.
+2. `hasPending()` — returns true when a commit is pending.
+3. `handleAgentEnd(messages)` — given a mock `AgentMessage[]` where the last assistant message contains the three commit blocks, returns `{ summary, commitContent }` and resets pending state.
+4. `handleAgentEnd(messages)` — returns `null` when no commit is pending.
+5. `handleAgentEnd(messages)` — returns `null` when the last assistant message does not contain commit blocks (agent didn't respond with commit content).
+
+Test extraction against mock assistant messages containing `TextContent` items with `### Branch Purpose`, `### Previous Progress Summary`, `### This Commit's Contribution`.
 
 **Step 2: Run test to verify it fails**
 Run: `pnpm run test -- src/commit-flow.test.ts`
@@ -484,11 +551,14 @@ _(or `pnpm run test -- src/index.wiring.test.ts` if split)_
 Replace the scaffold.
 
 - Declare `let state: GccState`, `let branchManager: BranchManager`, `const commitFlow = new CommitFlowManager()`.
-- Register 5 tools via `pi.registerTool` with `TypeBox` schemas. Tool executes delegate to `src/gcc-*.ts`.
+- Register 5 tools via `pi.registerTool` with `TypeBox` schemas. Tool `execute` delegates to `src/gcc-*.ts` functions, receiving `ctx.cwd` as `projectDir`.
 - Wire `turn_end` to `extractOtaInput` -> `formatOtaEntry` -> `branchManager.appendLog`.
-- Wire `before_agent_start` to `buildContextInjection`.
-- Wire `agent_end` to `commitFlow.handleAgentEnd`. If it returns data, call `finalizeGccCommit` and `pi.sendMessage` with `deliverAs: "followUp"`.
-- Wire `session_start`, `session_shutdown`, `session_before_compact`, and `resources_discover`.
+- Wire `before_agent_start` to `buildContextInjection`. Return the result directly (it's already a `BeforeAgentStartEventResult`).
+- Wire `agent_end` to `commitFlow.handleAgentEnd`. If it returns data, call `finalizeGccCommit` and `pi.sendMessage({ customType: "gcc_commit_result", content: commitResult, display: true }, { deliverAs: "followUp" })`.
+- Wire `session_start`: load state, initialize branchManager, show notification via `ctx.ui.notify`.
+- Wire `session_shutdown`: check for uncommitted turns, notify user.
+- Wire `session_before_compact`: optionally note GCC state.
+- Wire `resources_discover`: return `{ skillPaths: [path.resolve(__dirname, "../skills/gcc")] }` to auto-discover the GCC skill.
 
 > **Deferred: Session tracking.** The spec originally called for `session_start` to register sessions in `state.yaml`. This is deferred for v1 because the YAML parser does not support lists and no tool or hook depends on session tracking data. The `session_start` hook should only check for `.gcc/` and display a notification with current GCC state — no state.yaml writes.
 
