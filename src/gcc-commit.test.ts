@@ -48,17 +48,15 @@ describe("executeGccCommit", () => {
     expect(result.task).toContain(".gcc/branches/main/log.md");
     expect(result.task).toContain(".gcc/branches/main/commits.md");
     expect(result.task).toContain(".gcc/AGENTS.md");
-    expect(result.isEmpty).toBeFalsy();
   });
 
-  it("marks isEmpty when log has no entries", () => {
+  it("returns task even when log has no entries", () => {
     const result = executeGccCommit(
       { summary: "Empty commit" },
       state,
       branches
     );
 
-    expect(result.isEmpty).toBeTruthy();
     expect(result.task).toContain('branch "main"');
   });
 });

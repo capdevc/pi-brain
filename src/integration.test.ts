@@ -68,7 +68,6 @@ describe("integration", () => {
       );
       expect(commitResult.task).toContain('branch "phase-3-hooks"');
       expect(commitResult.task).toContain("Implemented hook extractor modules");
-      expect(commitResult.isEmpty).toBeFalsy();
 
       const finalizeResult = finalizeGccCommit(
         "Implemented hook extractor modules",

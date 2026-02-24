@@ -8,11 +8,6 @@ interface GccCommitParams {
   update_roadmap?: boolean;
 }
 
-interface CommitTaskResult {
-  task: string;
-  isEmpty: boolean;
-}
-
 /**
  * Build the subagent task string for commit distillation.
  * The subagent reads log.md and commits.md itself.
@@ -20,15 +15,12 @@ interface CommitTaskResult {
 export function executeGccCommit(
   params: GccCommitParams,
   state: GccState,
-  branches: BranchManager
-): CommitTaskResult {
+  _branches: BranchManager
+): { task: string } {
   const branch = state.activeBranch;
-  const log = branches.readLog(branch);
-  const isEmpty = !log.trim();
 
   return {
     task: buildCommitterTask(branch, params.summary),
-    isEmpty,
   };
 }
 

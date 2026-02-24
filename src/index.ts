@@ -185,11 +185,7 @@ export default function activate(pi: ExtensionAPI) {
         return createTextResult(GCC_NOT_INITIALIZED_MESSAGE);
       }
 
-      const { task, isEmpty } = executeGccCommit(params, state, branchManager);
-
-      if (isEmpty) {
-        // Still allow — agent may have progress to record
-      }
+      const { task } = executeGccCommit(params, state, branchManager);
 
       const result = await spawnCommitter(ctx.cwd, task, signal);
 
