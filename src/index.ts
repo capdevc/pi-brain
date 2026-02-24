@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type {
   AgentToolResult,
   ExtensionAPI,
+  ExtensionContext,
   SessionBeforeCompactEvent,
 } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
@@ -34,6 +35,20 @@ function isGccReady(
   branchManager: BranchManager | null
 ): state is GccState {
   return state !== null && branchManager !== null && state.isInitialized;
+}
+
+function upsertCurrentSession(state: GccState, ctx: ExtensionContext): void {
+  const sessionFile = ctx.sessionManager.getSessionFile();
+  if (!sessionFile) {
+    return;
+  }
+
+  state.upsertSession(
+    sessionFile,
+    state.activeBranch,
+    new Date().toISOString()
+  );
+  state.save();
 }
 
 function buildCompactionReminder(
@@ -100,12 +115,19 @@ export default function activate(pi: ExtensionAPI) {
       name: Type.String({ description: "Branch name" }),
       purpose: Type.String({ description: "Why this branch exists" }),
     }),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (!isGccReady(state, branchManager) || !branchManager) {
         return createTextResult(GCC_NOT_INITIALIZED_MESSAGE);
       }
 
-      return createTextResult(executeGccBranch(params, state, branchManager));
+      const previousBranch = state.activeBranch;
+      const result = executeGccBranch(params, state, branchManager);
+
+      if (state.activeBranch !== previousBranch) {
+        upsertCurrentSession(state, ctx);
+      }
+
+      return createTextResult(result);
     },
   });
 
@@ -116,12 +138,19 @@ export default function activate(pi: ExtensionAPI) {
     parameters: Type.Object({
       branch: Type.String({ description: "Target branch name" }),
     }),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (!isGccReady(state, branchManager) || !branchManager) {
         return createTextResult(GCC_NOT_INITIALIZED_MESSAGE);
       }
 
-      return createTextResult(executeGccSwitch(params, state, branchManager));
+      const previousBranch = state.activeBranch;
+      const result = executeGccSwitch(params, state, branchManager);
+
+      if (state.activeBranch !== previousBranch) {
+        upsertCurrentSession(state, ctx);
+      }
+
+      return createTextResult(result);
     },
   });
 
@@ -172,15 +201,7 @@ export default function activate(pi: ExtensionAPI) {
       return;
     }
 
-    const sessionFile = ctx.sessionManager.getSessionFile();
-    if (sessionFile) {
-      state.upsertSession(
-        sessionFile,
-        state.activeBranch,
-        new Date().toISOString()
-      );
-      state.save();
-    }
+    upsertCurrentSession(state, ctx);
 
     const turnCount = branchManager.getLogTurnCount(state.activeBranch);
     ctx.ui.notify(

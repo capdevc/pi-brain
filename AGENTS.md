@@ -59,7 +59,7 @@ Agent guide for this repository.
    - `agent_end` finalizes commit from assistant response.
 2. There is **no per-turn context injection hook**. Orientation is explicit via `gcc_context` and `read`.
 3. OTA logging happens in `turn_end` and appends to active branch `log.md`.
-4. `session_start` registers the current session file in `.gcc/state.yaml` when available.
+4. `session_start` registers the current session file in `.gcc/state.yaml`, and `gcc_branch`/`gcc_switch` keep that session's `branch` mapping in sync.
 5. `resources_discover` returns GCC skill path using ESM-safe path resolution (`import.meta.url`).
 6. `session_before_compact` is best-effort (mutates `event.customInstructions` in place).
 

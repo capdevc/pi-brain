@@ -41,6 +41,11 @@ function buildStatusView(
     const roadmap = fs.readFileSync(mainMdPath, "utf8").trim();
     if (roadmap) {
       lines.push(roadmap, "");
+    } else {
+      lines.push(
+        "Roadmap is empty. Update `.gcc/main.md` with project goals and current state.",
+        ""
+      );
     }
   } else {
     lines.push(

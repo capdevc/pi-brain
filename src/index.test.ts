@@ -202,6 +202,48 @@ describe("extensionWiring", () => {
     }
   });
 
+  it("updates the active session branch mapping after gcc_branch", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ui = createMockUi();
+      const ctx = {
+        cwd: projectDir,
+        ui,
+        sessionManager: {
+          getSessionFile: () => "/tmp/pi-session-branch-sync.jsonl",
+        },
+      } as unknown as ExtensionContext;
+
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      const gccBranch = mockPi.tools.find((t) => t.name === "gcc_branch");
+      expect(gccBranch).toBeDefined();
+
+      await gccBranch?.execute(
+        "tc-branch-sync",
+        { name: "feature-x", purpose: "Investigate branch sync" },
+        undefined,
+        undefined,
+        ctx
+      );
+
+      const stateYaml = fs.readFileSync(
+        path.join(projectDir, ".gcc", "state.yaml"),
+        "utf8"
+      );
+
+      expect(stateYaml).toMatch(
+        /sessions:[\s\S]*file: "\/tmp\/pi-session-branch-sync\.jsonl"[\s\S]*branch: "feature-x"/
+      );
+    } finally {
+      cleanup();
+    }
+  });
+
   it("discovers GCC skill path with ESM-safe resolution", async () => {
     const mockPi = createMockPi();
     activate(mockPi.api);

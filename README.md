@@ -39,7 +39,7 @@ It adds 5 tools to pi:
 It also uses hooks to:
 
 - auto-log turns to `.gcc/branches/<branch>/log.md`
-- register session files in `.gcc/state.yaml` on `session_start`
+- register/update session mapping in `.gcc/state.yaml` (on `session_start` and branch changes via `gcc_branch`/`gcc_switch`)
 - finalize 2-step commit flow on `agent_end`
 
 ---

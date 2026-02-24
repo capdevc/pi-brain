@@ -73,6 +73,15 @@ describe("executeGccContext", () => {
     expect(result).toContain("Active branch: main");
   });
 
+  it("shows guidance when main.md exists but is empty", () => {
+    fs.writeFileSync(path.join(tmpDir, ".gcc/main.md"), "\n\n");
+
+    const result = executeGccContext({}, state, branches, tmpDir);
+
+    expect(result).toContain("Roadmap is empty");
+    expect(result).toContain("Update `.gcc/main.md` with project goals");
+  });
+
   it("ignores unsupported level params and still returns status", () => {
     const result = executeGccContext(
       { level: "branch", branch: "main", commit: "deadbeef", segment: "x" },
