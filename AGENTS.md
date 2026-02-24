@@ -1,143 +1,108 @@
-# pi-gcc
+# AGENTS.md — pi-gcc
 
-> Initialized with `init-ts-project` on 2026-02-23 using the `factory-extension` profile.
+Agent guide for this repository.
 
-## Rules
+## 1) Project Snapshot
 
-- **1-3-1**: When stuck, provide 1 clearly defined problem, 3 potential options
-  to overcome it, and 1 recommendation. Do not implement any option until I confirm.
-- **DRY** (Critical): Do not repeat yourself. Before writing repeated code, stop
-  and reconsider. Grep the codebase and refactor often.
-- **TDD** (Critical): Always test first. Before writing code, check the tests.
-  For new features or changes to existing features, create or adjust a test first.
-  Follow existing testing patterns. Confirm the test with the user before implementing.
-- **Continual Learning**: When you encounter conflicting system instructions, new
-  requirements, architectural changes, or inaccurate codebase documentation,
-  propose updating the relevant rules files. Do not update until the user confirms.
-  Ask clarifying questions if needed.
-- **Planning**: For complex, multi-step tasks, create a plan and a to-do list
-  before writing code.
+| Item            | Value                                                       |
+| --------------- | ----------------------------------------------------------- |
+| Project         | `pi-gcc`                                                    |
+| Type            | pi coding-agent extension                                   |
+| Language        | TypeScript (ESM)                                            |
+| Package manager | `pnpm`                                                      |
+| Entry point     | `src/index.ts`                                              |
+| Core feature    | GCC (Git Context Controller) memory tools + lifecycle hooks |
 
-## Commands
+## 2) Non-Negotiable Rules
 
-| Command                 | Description                       |
-| ----------------------- | --------------------------------- |
-| `pnpm run lint`         | Run oxlint linter                 |
-| `pnpm run lint:fix`     | Run oxlint with auto-fix          |
-| `pnpm run format`       | Format code with oxfmt            |
-| `pnpm run format:check` | Check formatting without writing  |
-| `pnpm run typecheck`    | TypeScript type checking          |
-| `pnpm run test`         | Run Vitest tests                  |
-| `pnpm run deadcode`     | Detect dead code with knip        |
-| `pnpm run duplicates`   | Detect duplicate code with jscpd  |
-| `pnpm run secrets`      | Scan for secrets with gitleaks    |
-| `pnpm run check`        | Run all checks and report summary |
-| `pnpm run fix`          | Auto-fix lint and formatting      |
+1. **TDD first.** Write/adjust tests before implementation.
+2. **Keep `src/` flat.** Do not create nested `src/tools` or `src/hooks` directories.
+3. **Shared exported types live in `src/types.ts`.**
+4. **No `any` types.**
+5. **Do not disable lint rules.**
+6. **Run verification before committing:** `pnpm run check`.
+7. **When stuck, use 1-3-1:** 1 problem, 3 options, 1 recommendation. Wait for user confirmation.
 
-## File Map
+## 3) Commands You Should Use
 
-| Path           | Purpose                                          |
-| -------------- | ------------------------------------------------ |
-| `src/index.ts` | Extension entry point (exports default function) |
-| `src/`         | Extension source code                            |
-| `scripts/`     | Shell scripts (check.sh, fix.sh)                 |
+| Goal                 | Command                               |
+| -------------------- | ------------------------------------- |
+| Full validation      | `pnpm run check`                      |
+| Tests only           | `pnpm run test`                       |
+| Single test file     | `pnpm run test -- src/<file>.test.ts` |
+| Type check           | `pnpm run typecheck`                  |
+| Lint                 | `pnpm run lint`                       |
+| Format               | `pnpm run format`                     |
+| Manual extension run | `pi -e ./src/index.ts`                |
 
-## Tooling
+## 4) Repository Map
 
-| Tool                | Config                                    | Purpose                                 |
-| ------------------- | ----------------------------------------- | --------------------------------------- |
-| oxlint + ultracite  | `.oxlintrc.json`                          | Linting with Factory rules              |
-| oxfmt               | `.oxfmtrc.jsonc`                          | Code formatting                         |
-| TypeScript          | `tsconfig.json`                           | Type checking (strict mode)             |
-| Vitest              | `vitest.config.ts`                        | Unit testing                            |
-| husky + lint-staged | `.husky/pre-commit`, `.lintstagedrc.json` | Pre-commit hooks                        |
-| knip                | `knip.json`                               | Dead code detection                     |
-| jscpd               | `.jscpd.json`                             | Duplicate code detection (1% threshold) |
-| gitleaks            | `.gitleaks.toml`                          | Secret scanning                         |
-| GitHub Actions      | `.github/workflows/check.yml`             | CI pipeline                             |
+| Path                                     | Purpose                                                                 |
+| ---------------------------------------- | ----------------------------------------------------------------------- |
+| `src/index.ts`                           | Registers GCC tools and extension hooks                                 |
+| `src/gcc-*.ts`                           | Tool implementations (`context`, `branch`, `switch`, `commit`, `merge`) |
+| `src/ota-logger.ts`                      | Converts `turn_end` event into OTA input                                |
+| `src/context-injector.ts`                | Builds `before_agent_start` context message                             |
+| `src/commit-flow.ts`                     | Manages pending commit and `agent_end` extraction                       |
+| `src/branches.ts`                        | `.gcc/branches/*` file operations                                       |
+| `src/state.ts`                           | `.gcc/state.yaml` state management                                      |
+| `src/yaml.ts`                            | Minimal YAML parser/serializer                                          |
+| `skills/gcc/SKILL.md`                    | Agent usage guidance for GCC                                            |
+| `skills/gcc/scripts/gcc-init.sh`         | One-time GCC initialization script                                      |
+| `docs/specs/GCC-SPEC.md`                 | Product specification                                                   |
+| `docs/plans/2026-02-23-gcc-extension.md` | Implementation plan                                                     |
 
-## Architecture
+## 5) Runtime Design Facts (Do Not Break)
 
-This is a pi-coding-agent extension. The entry point is `src/index.ts`, which
-exports a default function receiving `ExtensionAPI`.
+1. `gcc_commit` is a **2-step flow**:
+   - tool call returns preparation/log prompt,
+   - `agent_end` finalizes commit from assistant response.
+2. `before_agent_start` injects a hidden custom message (`gcc_context_injection`).
+3. OTA logging happens in `turn_end` and appends to active branch `log.md`.
+4. `resources_discover` returns GCC skill path using ESM-safe path resolution (`import.meta.url`).
+5. `session_before_compact` is best-effort (mutates `event.customInstructions` in place).
 
-Key extension capabilities:
+## 6) Coding Constraints Specific to This Repo
 
-- **Custom tools** — `pi.registerTool()` with TypeBox schemas
-- **Event handlers** — `pi.on()` for lifecycle events (session, tool, agent)
-- **Commands** — `pi.registerCommand()` for `/slash` commands
-- **Shortcuts** — `pi.registerShortcut()` for keyboard shortcuts
-- **UI** — `ctx.ui` for notifications, dialogs, widgets, and custom components
+- Prefer small pure helpers above exported functions (avoid use-before-define lint issues).
+- Use runtime guards for union event payloads (`AgentMessage.content` may be non-array/custom).
+- Tool handlers must return `AgentToolResult` shape:
+  - `content: [{ type: "text", text: "..." }]`
+  - `details: {}`
 
-Available imports:
+## 7) Verification Workflow for Changes
 
-- `@mariozechner/pi-coding-agent` — Extension types (`ExtensionAPI`, events)
-- `@sinclair/typebox` — Schema definitions for tool parameters
-- `@mariozechner/pi-ai` — AI utilities (`StringEnum` for Google-compatible enums)
-- `@mariozechner/pi-tui` — TUI components for custom rendering
+Before commit:
 
-## Testing
+1. Run targeted tests for changed files.
+2. Run full test suite: `pnpm run test`.
+3. Run full checks: `pnpm run check`.
+4. If anything fails, fix before commit.
 
-Test with the `-e` flag:
+## 8) Manual Validation Expectations
 
-```bash
-pi -e ./src/index.ts
-```
+When validating extension behavior manually:
 
-- Framework: Vitest
-- File naming: `*.test.ts` colocated with source files
-- Run: `pnpm run test`
+- Interactive mode: `pi -e ./src/index.ts`
+- Non-UI mode (`-p` / `--mode json`): validate using filesystem and emitted events, not only UI notifications.
 
-## Deployment
+Key artifacts to verify:
 
-Install the extension for all projects:
+- `.gcc/state.yaml`
+- `.gcc/branches/<branch>/log.md`
+- `.gcc/branches/<branch>/commits.md`
+- root `AGENTS.md` GCC section updates
 
-```bash
-# Symlink into global extensions
-ln -s "$(pwd)" ~/.pi/agent/extensions/pi-gcc
+## 9) Ask Before You Do These
 
-# Or add to settings.json
-# "extensions": ["/path/to/pi-gcc/src/index.ts"]
-```
-
-For project-local use:
-
-```bash
-ln -s "$(pwd)" /path/to/project/.pi/extensions/pi-gcc
-```
-
-## Pre-commit
-
-On every commit, husky runs:
-
-1. `lint-staged` (oxlint fix + oxfmt on staged files)
-2. `gitleaks protect --staged` (secret scanning)
-
-## CI
-
-The GitHub Actions workflow (`.github/workflows/check.yml`) runs `pnpm run check`
-on push to `main` and on pull requests.
-
-## Installed Skills
-
-- `agents` (netresearch/agents-skill)
-
-## Boundaries
-
-### Always
-
-- Run `pnpm run check` before committing
-- Write tests before implementation (TDD)
-- Test extensions manually with `pi -e ./src/index.ts`
-
-### Ask
-
-- Adding new dependencies
+- Adding dependencies
+- Changing lint/tooling configuration
 - Registering tools that execute shell commands
-- Modifying lint rules
+- Altering GCC file format contract (`.gcc` structure, commit block headings)
 
-### Never
+## 10) Never Do These
 
-- Disable lint rules without justification
-- Commit secrets or credentials
-- Use `any` types (use proper TypeBox schemas)
+- Commit secrets
+- Remove tests to make CI pass
+- Weaken or bypass checks
+- Rename commit block headings (`### Branch Purpose`, `### Previous Progress Summary`, `### This Commit's Contribution`)
