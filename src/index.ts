@@ -135,14 +135,12 @@ export default function activate(pi: ExtensionAPI) {
         description: "Synthesized insight from source branch",
       }),
     }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       if (!isGccReady(state, branchManager) || !branchManager) {
         return createTextResult(GCC_NOT_INITIALIZED_MESSAGE);
       }
 
-      return createTextResult(
-        executeGccMerge(params, state, branchManager, ctx.cwd)
-      );
+      return createTextResult(executeGccMerge(params, state, branchManager));
     },
   });
 
@@ -213,8 +211,7 @@ export default function activate(pi: ExtensionAPI) {
       commitResult.summary,
       commitResult.commitContent,
       state,
-      branchManager,
-      ctx.cwd
+      branchManager
     );
     ctx.ui.notify(message, "info");
   });

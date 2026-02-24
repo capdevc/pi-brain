@@ -82,8 +82,7 @@ describe("integration", () => {
           "Added ota-logger/context-injector and verified behavior.",
         ].join("\n"),
         state,
-        branches,
-        projectDir
+        branches
       );
 
       expect(finalizeResult).toContain("Commit");

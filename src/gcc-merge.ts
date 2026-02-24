@@ -1,4 +1,3 @@
-import { updateRootAgentsMd } from "./agents-md.js";
 import type { BranchManager } from "./branches.js";
 import { generateHash } from "./hash.js";
 import type { GccState } from "./state.js";
@@ -15,8 +14,7 @@ interface GccMergeParams {
 export function executeGccMerge(
   params: GccMergeParams,
   state: GccState,
-  branches: BranchManager,
-  projectDir: string
+  branches: BranchManager
 ): string {
   const { branch: sourceBranch, synthesis } = params;
   const targetBranch = state.activeBranch;
@@ -49,8 +47,6 @@ export function executeGccMerge(
 
   state.setLastCommit(targetBranch, hash, timestamp, summary);
   state.save();
-
-  updateRootAgentsMd(projectDir, targetBranch, summary);
 
   return `Merge commit ${hash} written to branch "${targetBranch}" (merged from "${sourceBranch}").`;
 }

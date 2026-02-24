@@ -46,8 +46,7 @@ describe("executeGccMerge", () => {
           "Redis confirmed as caching layer. Will use for session storage.",
       },
       state,
-      branches,
-      tmpDir
+      branches
     );
 
     expect(result).toContain("Merge commit");
@@ -60,8 +59,7 @@ describe("executeGccMerge", () => {
     executeGccMerge(
       { branch: "explore-redis", synthesis: "Redis is good." },
       state,
-      branches,
-      tmpDir
+      branches
     );
 
     const commits = branches.readCommits("main");
@@ -73,8 +71,7 @@ describe("executeGccMerge", () => {
     executeGccMerge(
       { branch: "explore-redis", synthesis: "Merged Redis findings." },
       state,
-      branches,
-      tmpDir
+      branches
     );
 
     expect(state.lastCommit).not.toBeNull();
@@ -82,24 +79,24 @@ describe("executeGccMerge", () => {
     expect(state.lastCommit?.summary).toContain("Merge from explore-redis");
   });
 
-  it("updates root AGENTS.md", () => {
+  it("does not modify root AGENTS.md during merge", () => {
+    const before = fs.readFileSync(path.join(tmpDir, "AGENTS.md"), "utf8");
+
     executeGccMerge(
       { branch: "explore-redis", synthesis: "Merged." },
       state,
-      branches,
-      tmpDir
+      branches
     );
 
-    const agentsMd = fs.readFileSync(path.join(tmpDir, "AGENTS.md"), "utf8");
-    expect(agentsMd).toContain("Merge from explore-redis");
+    const after = fs.readFileSync(path.join(tmpDir, "AGENTS.md"), "utf8");
+    expect(after).toBe(before);
   });
 
   it("retains the merged branch (does not delete)", () => {
     executeGccMerge(
       { branch: "explore-redis", synthesis: "Done." },
       state,
-      branches,
-      tmpDir
+      branches
     );
 
     expect(branches.branchExists("explore-redis")).toBeTruthy();
@@ -109,8 +106,7 @@ describe("executeGccMerge", () => {
     const result = executeGccMerge(
       { branch: "main", synthesis: "Self merge." },
       state,
-      branches,
-      tmpDir
+      branches
     );
 
     expect(result).toContain("Cannot merge");
@@ -120,8 +116,7 @@ describe("executeGccMerge", () => {
     const result = executeGccMerge(
       { branch: "nonexistent", synthesis: "Missing." },
       state,
-      branches,
-      tmpDir
+      branches
     );
 
     expect(result).toContain("not found");

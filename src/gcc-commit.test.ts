@@ -105,13 +105,7 @@ describe("finalizeGccCommit", () => {
       "Established the project architecture.",
     ].join("\n");
 
-    finalizeGccCommit(
-      "First milestone",
-      commitContent,
-      state,
-      branches,
-      tmpDir
-    );
+    finalizeGccCommit("First milestone", commitContent, state, branches);
 
     const commits = branches.readCommits("main");
     expect(commits).toContain("## Commit");
@@ -123,7 +117,7 @@ describe("finalizeGccCommit", () => {
     const commitContent =
       "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nDone.\n";
 
-    finalizeGccCommit("Done", commitContent, state, branches, tmpDir);
+    finalizeGccCommit("Done", commitContent, state, branches);
 
     expect(branches.readLog("main")).toBe("");
   });
@@ -132,13 +126,7 @@ describe("finalizeGccCommit", () => {
     const commitContent =
       "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nArchitecture decided.\n";
 
-    finalizeGccCommit(
-      "Architecture decided",
-      commitContent,
-      state,
-      branches,
-      tmpDir
-    );
+    finalizeGccCommit("Architecture decided", commitContent, state, branches);
 
     expect(state.lastCommit).not.toBeNull();
     expect(state.lastCommit?.branch).toBe("main");
@@ -147,22 +135,23 @@ describe("finalizeGccCommit", () => {
     expect(state.lastCommit?.timestamp).toBeTruthy();
   });
 
-  it("updates root AGENTS.md", () => {
+  it("does not modify root AGENTS.md during commit finalization", () => {
     const commitContent =
       "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nNew milestone.\n";
 
-    finalizeGccCommit("New milestone", commitContent, state, branches, tmpDir);
+    const before = fs.readFileSync(path.join(tmpDir, "AGENTS.md"), "utf8");
 
-    const agentsMd = fs.readFileSync(path.join(tmpDir, "AGENTS.md"), "utf8");
-    expect(agentsMd).toContain("New milestone");
-    expect(agentsMd).toContain("main");
+    finalizeGccCommit("New milestone", commitContent, state, branches);
+
+    const after = fs.readFileSync(path.join(tmpDir, "AGENTS.md"), "utf8");
+    expect(after).toBe(before);
   });
 
   it("generates a valid 8-char hex hash in the commit entry", () => {
     const commitContent =
       "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nTest hash.\n";
 
-    finalizeGccCommit("Test hash", commitContent, state, branches, tmpDir);
+    finalizeGccCommit("Test hash", commitContent, state, branches);
 
     const commits = branches.readCommits("main");
     const hashMatch = /## Commit ([a-f0-9]{8})/.exec(commits);

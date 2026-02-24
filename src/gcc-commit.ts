@@ -1,4 +1,3 @@
-import { updateRootAgentsMd } from "./agents-md.js";
 import type { BranchManager } from "./branches.js";
 import { generateHash } from "./hash.js";
 import type { GccState } from "./state.js";
@@ -60,14 +59,13 @@ export function executeGccCommit(
 
 /**
  * Step 2: Write the agent's commit content to commits.md,
- * clear log.md, update state, and update root AGENTS.md.
+ * clear log.md, and update state.
  */
 export function finalizeGccCommit(
   summary: string,
   commitContent: string,
   state: GccState,
-  branches: BranchManager,
-  projectDir: string
+  branches: BranchManager
 ): string {
   const branch = state.activeBranch;
   const hash = generateHash();
@@ -88,8 +86,6 @@ export function finalizeGccCommit(
 
   state.setLastCommit(branch, hash, timestamp, summary);
   state.save();
-
-  updateRootAgentsMd(projectDir, branch, summary);
 
   return `Commit ${hash} written to branch "${branch}".`;
 }
