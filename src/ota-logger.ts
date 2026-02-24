@@ -17,7 +17,7 @@ interface TurnEndEventLike {
   turnIndex: number;
   message: {
     role: string;
-    content?: ContentItem[];
+    content?: unknown;
     provider?: string;
     model?: string;
     timestamp?: number;
@@ -40,6 +40,21 @@ function formatToolCallArgs(args: Record<string, unknown>): string {
     ([key, val]) => `${key}: ${formatArgValue(val)}`
   );
   return pairs.join(", ");
+}
+
+function normalizeContent(content: unknown): ContentItem[] {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  return content.filter((item): item is ContentItem => {
+    if (typeof item !== "object" || item === null) {
+      return false;
+    }
+
+    const candidate = item as { type?: unknown };
+    return typeof candidate.type === "string";
+  });
 }
 
 function extractTexts(content: ContentItem[]): string {
@@ -89,7 +104,7 @@ export function extractOtaInput(event: TurnEndEventLike): OtaEntryInput | null {
     return null;
   }
 
-  const content = message.content ?? [];
+  const content = normalizeContent(message.content);
   const thought = extractTexts(content);
   const thinking = extractThinking(content);
   const actions = extractActions(content);

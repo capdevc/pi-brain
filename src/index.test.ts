@@ -1,6 +1,273 @@
-describe("extension", () => {
-  it("exports a default function", async () => {
-    const mod = await import("./index.js");
-    expectTypeOf(mod.default).toBeFunction();
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
+import type {
+  AgentToolResult,
+  ExtensionAPI,
+  ExtensionContext,
+  ToolDefinition,
+} from "@mariozechner/pi-coding-agent";
+
+import activate from "./index.js";
+
+interface RegisteredHandler {
+  event: string;
+  handler: (event: unknown, ctx: ExtensionContext) => unknown;
+}
+
+interface MockUi {
+  notifications: { message: string; type: "info" | "warning" | "error" }[];
+  notify: (message: string, type?: "info" | "warning" | "error") => void;
+}
+
+interface MockPi {
+  tools: ToolDefinition[];
+  handlers: RegisteredHandler[];
+  api: ExtensionAPI;
+}
+
+function createMockUi(): MockUi {
+  const notifications: {
+    message: string;
+    type: "info" | "warning" | "error";
+  }[] = [];
+  return {
+    notifications,
+    notify(message: string, type: "info" | "warning" | "error" = "info") {
+      notifications.push({ message, type });
+    },
+  };
+}
+
+function createMockPi(): MockPi {
+  const tools: ToolDefinition[] = [];
+  const handlers: RegisteredHandler[] = [];
+
+  const api = {
+    registerTool(def: ToolDefinition) {
+      tools.push(def);
+    },
+    on(
+      event: string,
+      handler: (event: unknown, ctx: ExtensionContext) => unknown
+    ) {
+      handlers.push({ event, handler });
+    },
+  } as unknown as ExtensionAPI;
+
+  return { tools, handlers, api };
+}
+
+function getHandler(
+  handlers: RegisteredHandler[],
+  eventName: string
+): ((event: unknown, ctx: ExtensionContext) => unknown) | undefined {
+  return handlers.find((h) => h.event === eventName)?.handler;
+}
+
+function setupInitializedProject(): {
+  projectDir: string;
+  cleanup: () => void;
+} {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "gcc-index-test-"));
+  const gccDir = path.join(projectDir, ".gcc");
+  const branchDir = path.join(gccDir, "branches", "main");
+
+  fs.mkdirSync(branchDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(gccDir, "state.yaml"),
+    [
+      "active_branch: main",
+      'initialized: "2026-02-23T00:00:00Z"',
+      "last_commit:",
+      "  branch: main",
+      "  hash: a1b2c3d4",
+      '  timestamp: "2026-02-23T00:30:00Z"',
+      '  summary: "Initial foundation"',
+    ].join("\n")
+  );
+
+  fs.writeFileSync(
+    path.join(branchDir, "log.md"),
+    "## Turn 1 | 2026-02-23T02:00:00Z | anthropic/claude\n\n**Thought**: setup\n\n"
+  );
+  fs.writeFileSync(
+    path.join(branchDir, "commits.md"),
+    "# main\n\n**Purpose:** Main branch\n"
+  );
+  fs.writeFileSync(path.join(branchDir, "metadata.yaml"), "");
+
+  return {
+    projectDir,
+    cleanup: () => fs.rmSync(projectDir, { recursive: true, force: true }),
+  };
+}
+
+function getFirstText(result: AgentToolResult<unknown> | undefined): string {
+  const first = result?.content[0];
+  if (first?.type !== "text") {
+    return "";
+  }
+
+  return first.text;
+}
+
+describe("extensionWiring", () => {
+  it("registers all GCC tools and required event handlers", () => {
+    const mockPi = createMockPi();
+    activate(mockPi.api);
+
+    const toolNames = mockPi.tools.map((t) => t.name);
+    expect(toolNames).toHaveLength(5);
+    expect(toolNames).toContain("gcc_branch");
+    expect(toolNames).toContain("gcc_commit");
+    expect(toolNames).toContain("gcc_context");
+    expect(toolNames).toContain("gcc_merge");
+    expect(toolNames).toContain("gcc_switch");
+
+    const handlerNames = mockPi.handlers.map((h) => h.event);
+    expect(handlerNames).toContain("turn_end");
+    expect(handlerNames).toContain("before_agent_start");
+    expect(handlerNames).toContain("agent_end");
+    expect(handlerNames).toContain("session_start");
+    expect(handlerNames).toContain("session_shutdown");
+    expect(handlerNames).toContain("session_before_compact");
+    expect(handlerNames).toContain("resources_discover");
+  });
+
+  it("returns tool result shape and guards when GCC is uninitialized", async () => {
+    const mockPi = createMockPi();
+    activate(mockPi.api);
+
+    const ui = createMockUi();
+    const ctx = {
+      cwd: fs.mkdtempSync(path.join(os.tmpdir(), "gcc-uninit-")),
+      ui,
+    } as unknown as ExtensionContext;
+
+    try {
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      const gccContext = mockPi.tools.find((t) => t.name === "gcc_context");
+      expect(gccContext).toBeDefined();
+
+      const result = await gccContext?.execute(
+        "tc1",
+        { level: "status" },
+        undefined,
+        undefined,
+        ctx
+      );
+
+      expect(result?.content[0]?.type).toBe("text");
+      expect(result?.details).toStrictEqual({});
+      expect(getFirstText(result)).toContain("GCC not initialized");
+    } finally {
+      fs.rmSync((ctx as { cwd: string }).cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("discovers GCC skill path with ESM-safe resolution", async () => {
+    const mockPi = createMockPi();
+    activate(mockPi.api);
+
+    const resourcesDiscover = getHandler(mockPi.handlers, "resources_discover");
+    expect(resourcesDiscover).toBeDefined();
+
+    const ui = createMockUi();
+    const ctx = { cwd: process.cwd(), ui } as unknown as ExtensionContext;
+
+    const result = (await resourcesDiscover?.(
+      { type: "resources_discover", cwd: process.cwd(), reason: "startup" },
+      ctx
+    )) as { skillPaths?: string[] } | undefined;
+
+    expect(result?.skillPaths?.length).toBe(1);
+    expect(result?.skillPaths?.[0]).toContain("skills/gcc");
+  });
+
+  it("finalizes pending commit on agent_end and notifies the user", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ui = createMockUi();
+      const ctx = { cwd: projectDir, ui } as unknown as ExtensionContext;
+
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      const gccCommit = mockPi.tools.find((t) => t.name === "gcc_commit");
+      expect(gccCommit).toBeDefined();
+
+      const commitPrep = await gccCommit?.execute(
+        "tc-commit",
+        { summary: "Checkpoint phase 3" },
+        undefined,
+        undefined,
+        ctx
+      );
+      expect(getFirstText(commitPrep)).toContain("Commit Preparation");
+
+      const agentEnd = getHandler(mockPi.handlers, "agent_end");
+      expect(agentEnd).toBeDefined();
+
+      await agentEnd?.(
+        {
+          type: "agent_end",
+          messages: [
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "text",
+                  text: [
+                    "### Branch Purpose",
+                    "Build GCC extension.",
+                    "",
+                    "### Previous Progress Summary",
+                    "Phase 1 and 2 complete.",
+                    "",
+                    "### This Commit's Contribution",
+                    "Implemented hook extractors.",
+                  ].join("\n"),
+                },
+              ],
+            },
+          ],
+        },
+        ctx
+      );
+
+      const commitsPath = path.join(
+        projectDir,
+        ".gcc",
+        "branches",
+        "main",
+        "commits.md"
+      );
+      const commits = fs.readFileSync(commitsPath, "utf8");
+      expect(commits).toContain("### Branch Purpose");
+      expect(commits).toContain("Implemented hook extractors.");
+
+      const logPath = path.join(
+        projectDir,
+        ".gcc",
+        "branches",
+        "main",
+        "log.md"
+      );
+      const log = fs.readFileSync(logPath, "utf8");
+      expect(log).toBe("");
+
+      expect(
+        ui.notifications.some((n) => n.message.includes("Commit"))
+      ).toBeTruthy();
+    } finally {
+      cleanup();
+    }
   });
 });

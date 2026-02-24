@@ -13,16 +13,31 @@ interface CommitFlowResult {
 
 interface MessageLike {
   role: string;
-  content?: { type: string; text?: string }[];
+  content?: unknown;
+}
+
+function extractTextParts(content: unknown): string[] {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  return content
+    .filter((item) => {
+      if (typeof item !== "object" || item === null) {
+        return false;
+      }
+
+      const candidate = item as { type?: unknown; text?: unknown };
+      return candidate.type === "text" && typeof candidate.text === "string";
+    })
+    .map((item) => (item as { text: string }).text);
 }
 
 function findLastAssistantText(messages: MessageLike[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
-    if (msg.role === "assistant" && msg.content) {
-      const textParts = msg.content
-        .filter((c) => c.type === "text" && typeof c.text === "string")
-        .map((c) => c.text as string);
+    if (msg.role === "assistant") {
+      const textParts = extractTextParts(msg.content);
       if (textParts.length > 0) {
         return textParts.join("\n\n");
       }
