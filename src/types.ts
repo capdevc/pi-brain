@@ -7,3 +7,10 @@ export interface OtaEntryInput {
   actions: string[];
   observations: string[];
 }
+
+export interface GccContextParams {
+  level?: string;
+  branch?: string;
+  commit?: string;
+  segment?: string;
+}
