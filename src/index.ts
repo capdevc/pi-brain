@@ -10,7 +10,6 @@ import { Type } from "@sinclair/typebox";
 
 import { BranchManager } from "./branches.js";
 import { CommitFlowManager } from "./commit-flow.js";
-import { buildContextInjection } from "./context-injector.js";
 import { executeGccBranch } from "./gcc-branch.js";
 import { executeGccCommit, finalizeGccCommit } from "./gcc-commit.js";
 import { executeGccContext } from "./gcc-context.js";
@@ -185,14 +184,6 @@ export default function activate(pi: ExtensionAPI) {
   pi.on("resources_discover", () => ({
     skillPaths: [resolveSkillPath()],
   }));
-
-  pi.on("before_agent_start", () => {
-    if (!isGccReady(state, branchManager) || !branchManager) {
-      return;
-    }
-
-    return buildContextInjection(state, branchManager) ?? undefined;
-  });
 
   pi.on("turn_end", (event) => {
     if (!isGccReady(state, branchManager) || !branchManager) {

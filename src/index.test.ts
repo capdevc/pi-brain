@@ -128,7 +128,7 @@ describe("extensionWiring", () => {
 
     const handlerNames = mockPi.handlers.map((h) => h.event);
     expect(handlerNames).toContain("turn_end");
-    expect(handlerNames).toContain("before_agent_start");
+    expect(handlerNames).not.toContain("before_agent_start");
     expect(handlerNames).toContain("agent_end");
     expect(handlerNames).toContain("session_start");
     expect(handlerNames).toContain("session_shutdown");
