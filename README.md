@@ -6,20 +6,14 @@ It gives an agent a versioned memory in a `.gcc/` folder, so it can keep context
 
 ---
 
-## Quick start (copy/paste)
+## Quick start
 
 ```bash
 pi install git:github.com/Whamp/pi-gcc
 ```
 
-Then in the project where you want GCC memory:
-
-```bash
-cd /path/to/your-project
-bash "$(pi list --paths | grep pi-gcc)"/skills/gcc/scripts/gcc-init.sh
-```
-
-Inside pi, call `gcc_context` to confirm GCC is active.
+Then open pi in the project where you want GCC memory and either ask it to
+initialize GCC or run `/skill:gcc`.
 
 ---
 
@@ -111,20 +105,11 @@ This starts pi with the GCC extension loaded.
 
 ## Initialize GCC memory in a project
 
-Go to the project you want to use GCC with, then run:
+Inside pi, tell the agent to initialize GCC or run `/skill:gcc`.
+The agent loads the skill, resolves the init script path, and runs it.
+No manual bash invocation needed.
 
-```bash
-bash /absolute/path/to/pi-gcc/skills/gcc/scripts/gcc-init.sh
-```
-
-Example:
-
-```bash
-cd ~/projects/my-app
-bash ~/projects/pi-gcc/skills/gcc/scripts/gcc-init.sh
-```
-
-This creates:
+The init script creates:
 
 - `.gcc/state.yaml`
 - `.gcc/branches/main/log.md`
@@ -165,7 +150,7 @@ Inside pi (with extension loaded), try this order:
 
 ### "GCC not initialized. Run gcc-init.sh first."
 
-You are in a project that does not have `.gcc/` yet. Run the init script in that project directory.
+You are in a project that does not have `.gcc/` yet. Ask the agent to initialize GCC, or load the `gcc` skill.
 
 ### I do not see notifications in print/json mode
 
