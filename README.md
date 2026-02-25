@@ -9,20 +9,47 @@ It gives an agent a versioned memory in a `.gcc/` folder, so it can keep context
 ## Quick start (copy/paste)
 
 ```bash
-# 1) in this repo
-cd /path/to/pi-gcc
+pi install git:github.com/Whamp/pi-gcc
+```
+
+Then in the project where you want GCC memory:
+
+```bash
+cd /path/to/your-project
+bash "$(pi list --paths | grep pi-gcc)"/skills/gcc/scripts/gcc-init.sh
+```
+
+Inside pi, call `gcc_context` to confirm GCC is active.
+
+---
+
+## Install options
+
+```bash
+# From git (latest)
+pi install git:github.com/Whamp/pi-gcc
+
+# From git (pinned version)
+pi install git:github.com/Whamp/pi-gcc@v0.1.0
+
+# Project-local (shared with team via .pi/settings.json)
+pi install -l git:github.com/Whamp/pi-gcc
+
+# Try without installing
+pi -e git:github.com/Whamp/pi-gcc
+```
+
+### Local development
+
+```bash
+git clone https://github.com/Whamp/pi-gcc.git
+cd pi-gcc
 pnpm install
 pnpm run check
 
-# 2) run pi with the extension loaded
+# Run pi with the extension loaded from source
 pi -e ./src/index.ts
-
-# 3) in the project where you want GCC memory
-cd /path/to/your-project
-bash /path/to/pi-gcc/skills/gcc/scripts/gcc-init.sh
 ```
-
-After that, inside pi, call `gcc_context` to confirm GCC is active.
 
 ---
 
@@ -51,7 +78,6 @@ It also uses hooks to:
 You need:
 
 - Node.js 20+
-- pnpm
 - pi CLI
 - git
 
@@ -59,32 +85,21 @@ Check quickly:
 
 ```bash
 node -v
-pnpm -v
 pi --help
 git --version
 ```
 
-### 2) Install project dependencies
-
-From this repository root:
+### 2) Install the extension
 
 ```bash
-pnpm install
+pi install git:github.com/Whamp/pi-gcc
 ```
-
-### 3) Run tests once
-
-```bash
-pnpm run check
-```
-
-If this passes, your local setup is healthy.
 
 ---
 
-## Run the extension locally
+## Run the extension locally (development)
 
-From this repository root:
+From the cloned repository root:
 
 ```bash
 pi -e ./src/index.ts
@@ -172,4 +187,4 @@ No commit is finalized until step 2 is present.
 
 ## Project status
 
-This repository is currently private and under active development.
+Under active development.
