@@ -4,27 +4,77 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import type { SubagentResult } from "./types.js";
+import { parseYaml } from "./yaml.js";
 
 const COMMITTER_MODEL = "google-antigravity/gemini-3-flash";
 const COMMITTER_TOOLS = "read,grep,find,ls";
 
+interface AgentDefinition {
+  prompt: string;
+  model: string;
+  tools: string;
+  skills: string;
+  extensions: string;
+}
+
 /**
- * Resolve the gcc-committer agent system prompt from the agent definition file.
- * The body (everything after the YAML frontmatter) is the system prompt.
+ * Resolve the gcc-committer agent definition from the agent definition file.
+ * Checks multiple locations to support both local development and npm installs.
+ * Parses the YAML frontmatter for properties and uses the body as the system prompt.
  */
-function resolveAgentPrompt(): string {
+function resolveAgentPrompt(): AgentDefinition {
   const currentFile = new URL(import.meta.url).pathname;
   const currentDir = path.dirname(currentFile);
-  const agentFile = path.resolve(currentDir, "../.pi/agents/gcc-committer.md");
 
-  try {
-    const content = fs.readFileSync(agentFile, "utf8");
-    // Strip YAML frontmatter (--- ... ---) to get the system prompt body
-    const match = content.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
-    return match ? match[1].trim() : content.trim();
-  } catch {
-    return "";
+  // Possible locations for the agent definition file
+  const candidates = [
+    // Installed package: dist/ or src/ -> ../agents/ (bundled in package)
+    path.resolve(currentDir, "../agents/gcc-committer.md"),
+    // Local development: src/ -> ../.pi/agents/
+    path.resolve(currentDir, "../.pi/agents/gcc-committer.md"),
+    // Fallback: check if bundled alongside source
+    path.resolve(currentDir, "./agents/gcc-committer.md"),
+  ];
+
+  for (const agentFile of candidates) {
+    try {
+      const content = fs.readFileSync(agentFile, "utf8");
+
+      const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+      let frontmatter = "";
+      let prompt = content.trim();
+
+      if (match) {
+        const [, matchedFrontmatter, matchedPrompt] = match;
+        frontmatter = matchedFrontmatter;
+        prompt = matchedPrompt.trim();
+      }
+
+      let parsed: Record<string, unknown> = {};
+      if (frontmatter) {
+        try {
+          parsed = parseYaml(frontmatter) as Record<string, unknown>;
+        } catch {
+          // Ignore parse errors, fallback to defaults
+        }
+      }
+
+      return {
+        prompt,
+        model:
+          typeof parsed.model === "string" ? parsed.model : COMMITTER_MODEL,
+        tools:
+          typeof parsed.tools === "string" ? parsed.tools : COMMITTER_TOOLS,
+        skills: typeof parsed.skills === "string" ? parsed.skills : "",
+        extensions:
+          typeof parsed.extensions === "string" ? parsed.extensions : "",
+      };
+    } catch {
+      continue;
+    }
   }
+
+  throw new Error("Could not locate gcc-committer.md agent definition file");
 }
 
 export function buildCommitterTask(branch: string, summary: string): string {
@@ -165,24 +215,58 @@ export function spawnCommitter(
   signal?: AbortSignal
 ): Promise<SubagentResult> {
   return new Promise((resolve) => {
+    let agentDef: AgentDefinition;
+    try {
+      agentDef = resolveAgentPrompt();
+    } catch (error: unknown) {
+      resolve({
+        text: "",
+        exitCode: 1,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to resolve agent definition",
+      });
+      return;
+    }
+
     const args = [
       "--mode",
       "json",
       "--no-session",
       "--model",
-      COMMITTER_MODEL,
+      agentDef.model,
       "--tools",
-      COMMITTER_TOOLS,
+      agentDef.tools,
       "-p",
       `Task: ${task}`,
     ];
 
+    if (agentDef.skills) {
+      const skills = agentDef.skills
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const skill of skills) {
+        args.push("--skill", skill);
+      }
+    }
+
+    if (agentDef.extensions) {
+      const exts = agentDef.extensions
+        .split(",")
+        .map((e) => e.trim())
+        .filter(Boolean);
+      for (const ext of exts) {
+        args.push("--extension", ext);
+      }
+    }
+
     let tmpPromptDir: string | null = null;
     let tmpPromptPath: string | null = null;
 
-    const systemPrompt = resolveAgentPrompt();
-    if (systemPrompt) {
-      const tmp = writePromptToTempFile(systemPrompt);
+    if (agentDef.prompt) {
+      const tmp = writePromptToTempFile(agentDef.prompt);
       tmpPromptDir = tmp.dir;
       tmpPromptPath = tmp.filePath;
       args.push("--append-system-prompt", tmpPromptPath);

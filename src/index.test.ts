@@ -263,6 +263,76 @@ describe("extensionWiring", () => {
     expect(result?.skillPaths?.[0]).toContain("skills/gcc");
   });
 
+  it("lazily loads state when .gcc/ is created after session_start", async () => {
+    const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "gcc-lazy-init-"));
+
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ui = createMockUi();
+      const ctx = {
+        cwd: projectDir,
+        ui,
+        sessionManager: {
+          getSessionFile: () => "/tmp/pi-session-lazy.jsonl",
+        },
+      } as unknown as ExtensionContext;
+
+      // session_start fires with no .gcc/ directory
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      const gccContext = mockPi.tools.find((t) => t.name === "gcc_context");
+
+      // Tool returns "not initialized" before .gcc/ exists
+      const before = await gccContext?.execute(
+        "tc-lazy-before",
+        {},
+        undefined,
+        undefined,
+        ctx
+      );
+      expect(getFirstText(before)).toContain("GCC not initialized");
+
+      // Simulate mid-session init: create .gcc/ structure
+      const branchDir = path.join(projectDir, ".gcc", "branches", "main");
+      fs.mkdirSync(branchDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(projectDir, ".gcc", "state.yaml"),
+        ["active_branch: main", 'initialized: "2026-02-25T00:00:00Z"'].join(
+          "\n"
+        )
+      );
+      fs.writeFileSync(path.join(branchDir, "log.md"), "");
+      fs.writeFileSync(
+        path.join(branchDir, "commits.md"),
+        "# main\n\n**Purpose:** Main branch\n"
+      );
+      fs.writeFileSync(path.join(branchDir, "metadata.yaml"), "");
+
+      // Tool now lazily picks up the new state
+      const after = await gccContext?.execute(
+        "tc-lazy-after",
+        {},
+        undefined,
+        undefined,
+        ctx
+      );
+      expect(getFirstText(after)).not.toContain("GCC not initialized");
+      expect(getFirstText(after)).toContain("Active branch: main");
+
+      // Session should be registered in state.yaml
+      const stateYaml = fs.readFileSync(
+        path.join(projectDir, ".gcc", "state.yaml"),
+        "utf8"
+      );
+      expect(stateYaml).toContain("/tmp/pi-session-lazy.jsonl");
+    } finally {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
   it("gcc_commit returns error when subagent fails", async () => {
     const { projectDir, cleanup } = setupInitializedProject();
     try {

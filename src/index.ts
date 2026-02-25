@@ -85,6 +85,24 @@ export default function activate(pi: ExtensionAPI) {
   let state: GccState | null = null;
   let branchManager: BranchManager | null = null;
 
+  function tryLoad(ctx: ExtensionContext): boolean {
+    if (isGccReady(state, branchManager)) {
+      return true;
+    }
+
+    const candidate = new GccState(ctx.cwd);
+    candidate.load();
+
+    if (!candidate.isInitialized) {
+      return false;
+    }
+
+    state = candidate;
+    branchManager = new BranchManager(ctx.cwd);
+    upsertCurrentSession(state, ctx);
+    return true;
+  }
+
   pi.registerTool({
     name: "gcc_context",
     label: "GCC Context",
@@ -96,7 +114,11 @@ export default function activate(pi: ExtensionAPI) {
       segment: Type.Optional(Type.String()),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      if (!isGccReady(state, branchManager) || !branchManager) {
+      if (
+        !tryLoad(ctx) ||
+        !isGccReady(state, branchManager) ||
+        !branchManager
+      ) {
         return createTextResult(GCC_NOT_INITIALIZED_MESSAGE);
       }
 
@@ -115,7 +137,11 @@ export default function activate(pi: ExtensionAPI) {
       purpose: Type.String({ description: "Why this branch exists" }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      if (!isGccReady(state, branchManager) || !branchManager) {
+      if (
+        !tryLoad(ctx) ||
+        !isGccReady(state, branchManager) ||
+        !branchManager
+      ) {
         return createTextResult(GCC_NOT_INITIALIZED_MESSAGE);
       }
 
@@ -138,7 +164,11 @@ export default function activate(pi: ExtensionAPI) {
       branch: Type.String({ description: "Target branch name" }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      if (!isGccReady(state, branchManager) || !branchManager) {
+      if (
+        !tryLoad(ctx) ||
+        !isGccReady(state, branchManager) ||
+        !branchManager
+      ) {
         return createTextResult(GCC_NOT_INITIALIZED_MESSAGE);
       }
 
@@ -163,8 +193,12 @@ export default function activate(pi: ExtensionAPI) {
         description: "Synthesized insight from source branch",
       }),
     }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      if (!isGccReady(state, branchManager) || !branchManager) {
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      if (
+        !tryLoad(ctx) ||
+        !isGccReady(state, branchManager) ||
+        !branchManager
+      ) {
         return createTextResult(GCC_NOT_INITIALIZED_MESSAGE);
       }
 
@@ -181,7 +215,11 @@ export default function activate(pi: ExtensionAPI) {
       update_roadmap: Type.Optional(Type.Boolean()),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-      if (!isGccReady(state, branchManager) || !branchManager) {
+      if (
+        !tryLoad(ctx) ||
+        !isGccReady(state, branchManager) ||
+        !branchManager
+      ) {
         return createTextResult(GCC_NOT_INITIALIZED_MESSAGE);
       }
 
