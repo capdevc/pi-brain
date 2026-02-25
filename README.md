@@ -67,7 +67,7 @@ It also uses hooks to:
 
 - auto-log turns to `.gcc/branches/<branch>/log.md`
 - register/update session mapping in `.gcc/state.yaml` (on `session_start` and branch changes via `gcc_branch`/`gcc_switch`)
-- finalize 2-step commit flow on `agent_end`
+- warn when `log.md` exceeds 600 KB (~150-175k tokens), nudging the agent to commit
 
 ---
 
@@ -143,11 +143,7 @@ Inside pi (with extension loaded), try this order:
 1. `gcc_context` (no args) — see current memory state
 2. `gcc_branch` with name + purpose — create exploration branch
 3. Do normal work (read/edit/test)
-4. `gcc_commit` with a summary
-5. Provide the 3 commit blocks when prompted:
-   - `### Branch Purpose`
-   - `### Previous Progress Summary`
-   - `### This Commit's Contribution`
+4. `gcc_commit` with a summary — a subagent distills your log into a structured commit
 
 ---
 
@@ -161,6 +157,7 @@ Inside pi (with extension loaded), try this order:
 | Lint                   | `pnpm run lint`      |
 | Format                 | `pnpm run format`    |
 | Auto-fix lint + format | `pnpm run fix`       |
+| Release new version    | `pnpm run release`   |
 
 ---
 
@@ -174,14 +171,17 @@ You are in a project that does not have `.gcc/` yet. Run the init script in that
 
 That is expected. In non-UI mode, verify by checking files in `.gcc/` and emitted events.
 
-### `gcc_commit` did not write to `commits.md`
+---
 
-`gcc_commit` is 2-step:
+## Releasing
 
-1. tool returns log context,
-2. agent must reply with the 3 required commit headings.
+Uses [changelogen](https://github.com/unjs/changelogen) with conventional commits.
 
-No commit is finalized until step 2 is present.
+```bash
+pnpm run release
+```
+
+This bumps the version in `package.json`, updates `CHANGELOG.md` from your commit history, creates a git tag, and pushes everything.
 
 ---
 

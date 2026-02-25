@@ -33,6 +33,7 @@ Agent guide for this repository.
 | Type check           | `pnpm run typecheck`                  |
 | Lint                 | `pnpm run lint`                       |
 | Format               | `pnpm run format`                     |
+| Release new version  | `pnpm run release`                    |
 | Manual extension run | `pi -e ./src/index.ts`                |
 
 ## 4) Repository Map
@@ -41,8 +42,9 @@ Agent guide for this repository.
 | --------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `src/index.ts`                                      | Registers GCC tools and extension hooks                                       |
 | `src/gcc-*.ts`                                      | Tool implementations (`context`, `branch`, `switch`, `commit`, `merge`)       |
+| `src/constants.ts`                                  | Shared constants (`LOG_SIZE_WARNING_BYTES`)                                   |
+| `src/subagent.ts`                                   | Commit distillation subagent spawner and output parser                        |
 | `src/ota-logger.ts`                                 | Converts `turn_end` event into OTA input                                      |
-| `src/commit-flow.ts`                                | Manages pending commit and `agent_end` extraction                             |
 | `src/branches.ts`                                   | `.gcc/branches/*` file operations                                             |
 | `src/state.ts`                                      | `.gcc/state.yaml` state + session tracking                                    |
 | `src/yaml.ts`                                       | Minimal YAML parser/serializer (scalars, nested maps, top-level object lists) |
@@ -51,17 +53,20 @@ Agent guide for this repository.
 | `docs/specs/GCC-SPEC-USE-THIS-ONE.md`               | Canonical product specification                                               |
 | `docs/specs/fix-specs-diff.md`                      | Spec-vs-runtime reconciliation notes + approved divergences                   |
 | `docs/plans/2026-02-23-spec-sync-implementation.md` | Spec sync implementation plan                                                 |
+| `CHANGELOG.md`                                      | Auto-generated changelog (managed by changelogen)                             |
 
 ## 5) Runtime Design Facts (Do Not Break)
 
-1. `gcc_commit` is a **2-step flow**:
-   - tool call returns preparation/log prompt,
-   - `agent_end` finalizes commit from assistant response.
+1. `gcc_commit` spawns a **subagent** for commit distillation:
+   - The subagent reads `log.md` and the latest commit in a fresh context window.
+   - The extension appends the result to `commits.md` and clears `log.md`.
 2. There is **no per-turn context injection hook**. Orientation is explicit via `gcc_context` and `read`.
 3. OTA logging happens in `turn_end` and appends to active branch `log.md`.
-4. `session_start` registers the current session file in `.gcc/state.yaml`, and `gcc_branch`/`gcc_switch` keep that session's `branch` mapping in sync.
-5. `resources_discover` returns GCC skill path using ESM-safe path resolution (`import.meta.url`).
-6. `session_before_compact` is best-effort (mutates `event.customInstructions` in place).
+4. **Lazy state loading**: tools re-check for `.gcc/` on each call if not yet loaded, so mid-session initialization works without restart.
+5. `session_start` registers the current session file in `.gcc/state.yaml`, and `gcc_branch`/`gcc_switch` keep that session's `branch` mapping in sync.
+6. **Log size warning**: when `log.md` exceeds 600 KB (~150-175k tokens), the extension warns in `session_start` and `gcc_context` output, nudging the agent to commit.
+7. `resources_discover` returns GCC skill path using ESM-safe path resolution (`import.meta.url`).
+8. `session_before_compact` is best-effort (mutates `event.customInstructions` in place).
 
 ## 6) Coding Constraints Specific to This Repo
 
