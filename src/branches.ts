@@ -80,6 +80,14 @@ export class BranchManager {
     return fs.existsSync(branchDir) && fs.statSync(branchDir).isDirectory();
   }
 
+  getLogSizeBytes(branch: string): number {
+    const lp = this.logPath(branch);
+    if (!fs.existsSync(lp)) {
+      return 0;
+    }
+    return fs.statSync(lp).size;
+  }
+
   getLogTurnCount(branch: string): number {
     const log = this.readLog(branch);
     if (log === "") {

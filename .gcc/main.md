@@ -13,7 +13,8 @@ pi-gcc gives pi coding agents versioned memory via a `.gcc/` directory. Agents c
 - Subagent-based commit distillation (canonical spec flow, replaced earlier 2-step flow)
 - Cache-safe design: static root AGENTS.md, no per-turn injection, fixed tool definitions
 - Lazy state initialization — tools work immediately after mid-session `.gcc/` creation
-- 99 tests passing, all checks green
+- Log size warning at 600 KB — nudges agent to commit before subagent context overflow
+- 105 tests passing, all checks green
 
 ## Key Decisions Made
 
@@ -22,6 +23,7 @@ pi-gcc gives pi coding agents versioned memory via a `.gcc/` directory. Agents c
 - **No `before_agent_start` injection** — agent retrieves context on demand via `gcc_context` and `read`. Cache-safe by design.
 - **Track `.gcc/` in git except `log.md`** — enables cross-agent collaboration; transient logs are working state.
 - **Lazy state initialization** — tools re-check for `.gcc/` on each call if not yet loaded, so mid-session init just works. Principle: fix the code, not just the docs.
+- **Log size threshold (600 KB)** — approximately 150-175k tokens. Extension warns in `session_start` and `gcc_context` when log.md is large, nudging toward commit. No truncation guidance — agents have `edit`/`write` if they need it. Based on empirical ratio of ~3.7-4 bytes/token for mixed markdown content.
 - **Minimal YAML parser** — custom `src/yaml.ts` avoids external dependency for `state.yaml` and `metadata.yaml` operations.
 
 ## Milestones
@@ -37,7 +39,7 @@ pi-gcc gives pi coding agents versioned memory via a `.gcc/` directory. Agents c
 - [x] Subagent-based commit distillation
 - [x] npm publish preparation (metadata, peer deps, LICENSE, .npmrc)
 - [x] Lazy state initialization (mid-session init works without restart)
-- [x] Skill refinements from first brownfield run (init path, greenfield/brownfield, post-init checklist)
+- [x] Log size warning at 600 KB threshold (strategic forgetting nudge)
 
 ### Planned / Open
 

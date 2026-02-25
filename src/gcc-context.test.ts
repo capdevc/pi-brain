@@ -3,6 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { BranchManager } from "./branches.js";
+import { LOG_SIZE_WARNING_BYTES } from "./constants.js";
 import { executeGccContext } from "./gcc-context.js";
 import { GccState } from "./state.js";
 
@@ -94,5 +95,25 @@ describe("executeGccContext", () => {
     expect(result).toContain(
       "Use `read .gcc/branches/<name>/commits.md` for full history."
     );
+  });
+
+  it("warns when log.md exceeds size threshold", () => {
+    fs.writeFileSync(path.join(tmpDir, ".gcc/main.md"), "# Roadmap\n");
+    branches.appendLog("main", "x".repeat(LOG_SIZE_WARNING_BYTES + 1));
+
+    const result = executeGccContext({}, state, branches, tmpDir);
+
+    expect(result).toContain("**Warning:**");
+    expect(result).toContain("log.md is large");
+    expect(result).toContain("You should commit");
+  });
+
+  it("does not warn when log.md is below threshold", () => {
+    fs.writeFileSync(path.join(tmpDir, ".gcc/main.md"), "# Roadmap\n");
+    branches.appendLog("main", "x".repeat(1000));
+
+    const result = executeGccContext({}, state, branches, tmpDir);
+
+    expect(result).not.toContain("**Warning:**");
   });
 });

@@ -125,6 +125,24 @@ describe("branchManager", () => {
     });
   });
 
+  describe("getLogSizeBytes", () => {
+    it("returns file size in bytes", () => {
+      manager.createBranch("main", "Main branch");
+      manager.appendLog("main", "x".repeat(1000));
+
+      expect(manager.getLogSizeBytes("main")).toBe(1000);
+    });
+
+    it("returns 0 for missing branch", () => {
+      expect(manager.getLogSizeBytes("nonexistent")).toBe(0);
+    });
+
+    it("returns 0 for empty log", () => {
+      manager.createBranch("main", "Main branch");
+      expect(manager.getLogSizeBytes("main")).toBe(0);
+    });
+  });
+
   describe("getLatestCommit", () => {
     it("returns null for empty commits.md", () => {
       manager.createBranch("main", "Main branch");

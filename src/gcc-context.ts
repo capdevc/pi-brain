@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import type { BranchManager } from "./branches.js";
+import { LOG_SIZE_WARNING_BYTES } from "./constants.js";
 import type { GccState } from "./state.js";
 import type { GccContextParams } from "./types.js";
 
@@ -55,6 +56,16 @@ function buildStatusView(
   }
 
   lines.push(`Active branch: ${state.activeBranch}`, "");
+
+  const logSizeBytes = branches.getLogSizeBytes(state.activeBranch);
+  if (logSizeBytes >= LOG_SIZE_WARNING_BYTES) {
+    const sizeKB = Math.round(logSizeBytes / 1024);
+    lines.push(
+      `**Warning:** log.md is large (${sizeKB} KB). ` +
+        "You should commit to distill this into structured memory.",
+      ""
+    );
+  }
 
   const branchList = branches.listBranches();
   if (branchList.length > 0) {

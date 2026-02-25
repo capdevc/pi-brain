@@ -202,6 +202,43 @@ describe("extensionWiring", () => {
     }
   });
 
+  it("shows warning notification when log.md exceeds size threshold", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      // Write a large log.md
+      const logPath = path.join(
+        projectDir,
+        ".gcc",
+        "branches",
+        "main",
+        "log.md"
+      );
+      fs.writeFileSync(logPath, "x".repeat(700 * 1024));
+
+      const ui = createMockUi();
+      const ctx = {
+        cwd: projectDir,
+        ui,
+        sessionManager: {
+          getSessionFile: () => "/tmp/pi-session-large-log.jsonl",
+        },
+      } as unknown as ExtensionContext;
+
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      expect(ui.notifications).toHaveLength(1);
+      expect(ui.notifications[0].type).toBe("warning");
+      expect(ui.notifications[0].message).toContain("log.md is large");
+      expect(ui.notifications[0].message).toContain("should commit");
+    } finally {
+      cleanup();
+    }
+  });
+
   it("updates the active session branch mapping after gcc_branch", async () => {
     const { projectDir, cleanup } = setupInitializedProject();
     try {

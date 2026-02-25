@@ -44,6 +44,9 @@ already made, completed milestones, and planned work.
 - You're about to change direction significantly
 - A meaningful amount of work has accumulated (use judgment, not a fixed interval)
 - Before ending a session if significant progress was made
+- **When the extension warns that log.md is large** — even mundane activity is
+  worth distilling. A commit that records "routine maintenance, no significant
+  decisions" tells future agents what was already explored.
 
 ## How to Write Good Commits
 

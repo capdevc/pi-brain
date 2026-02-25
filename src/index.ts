@@ -10,6 +10,7 @@ import type {
 import { Type } from "@sinclair/typebox";
 
 import { BranchManager } from "./branches.js";
+import { LOG_SIZE_WARNING_BYTES } from "./constants.js";
 import { executeGccBranch } from "./gcc-branch.js";
 import { executeGccCommit, finalizeGccCommit } from "./gcc-commit.js";
 import { executeGccContext } from "./gcc-context.js";
@@ -263,10 +264,20 @@ export default function activate(pi: ExtensionAPI) {
     upsertCurrentSession(state, ctx);
 
     const turnCount = branchManager.getLogTurnCount(state.activeBranch);
-    ctx.ui.notify(
-      `GCC active: branch "${state.activeBranch}" (${turnCount} uncommitted turn${turnCount === 1 ? "" : "s"}).`,
-      "info"
-    );
+    const logSizeBytes = branchManager.getLogSizeBytes(state.activeBranch);
+
+    if (logSizeBytes >= LOG_SIZE_WARNING_BYTES) {
+      const sizeKB = Math.round(logSizeBytes / 1024);
+      ctx.ui.notify(
+        `GCC: log.md is large (${sizeKB} KB). You should commit to distill this into structured memory.`,
+        "warning"
+      );
+    } else {
+      ctx.ui.notify(
+        `GCC active: branch "${state.activeBranch}" (${turnCount} uncommitted turn${turnCount === 1 ? "" : "s"}).`,
+        "info"
+      );
+    }
   });
 
   pi.on("resources_discover", () => ({
