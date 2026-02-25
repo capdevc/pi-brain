@@ -40,11 +40,13 @@
     "secrets": "gitleaks detect --source . --no-git",
     "check": "bash scripts/check.sh",
     "fix": "bash scripts/fix.sh",
+    "release": "changelogen --release && git push --follow-tags",
     "prepare": "node -e \"try{require.resolve('husky')}catch(e){process.exit(0)}\" && husky"
   },
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "^0.54.2",
     "@types/node": "^25.3.0",
+    "changelogen": "^0.6.2",
     "gitleaks": "^1.0.0",
     "husky": "^9.1.7",
     "jscpd": "^4.0.8",

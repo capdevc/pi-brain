@@ -1,0 +1,85 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## v0.1.1 (unreleased)
+
+[compare changes](https://github.com/Whamp/pi-gcc/compare/v0.1.0...main)
+
+### 🚀 Enhancements
+
+- Wire gcc_commit to subagent-based commit distillation ([25471f5](https://github.com/Whamp/pi-gcc/commit/25471f5))
+- Lazy state init and log size warning at 600 KB ([55aed0f](https://github.com/Whamp/pi-gcc/commit/55aed0f))
+
+### 📖 Documentation
+
+- Add install instructions to README ([690a0b9](https://github.com/Whamp/pi-gcc/commit/690a0b9))
+- Refine SKILL.md for brownfield usage and post-init guidance ([000f7fd](https://github.com/Whamp/pi-gcc/commit/000f7fd))
+- Direct agents to .gcc/main.md for project orientation ([1f78bc4](https://github.com/Whamp/pi-gcc/commit/1f78bc4))
+
+### 🏡 Chore
+
+- Add .npmrc to skip dev deps and scripts for production installs ([c718329](https://github.com/Whamp/pi-gcc/commit/c718329))
+- Add .gcc/ project memory and gitignore log.md ([307ac9e](https://github.com/Whamp/pi-gcc/commit/307ac9e))
+
+## v0.1.0
+
+### 🚀 Enhancements
+
+- Add minimal YAML parser/serializer ([b6e4bfc](https://github.com/Whamp/pi-gcc/commit/b6e4bfc))
+- Add GCC state manager ([2047857](https://github.com/Whamp/pi-gcc/commit/2047857))
+- Add commit hash generator ([f09a7df](https://github.com/Whamp/pi-gcc/commit/f09a7df))
+- Add branch manager ([b67ae00](https://github.com/Whamp/pi-gcc/commit/b67ae00))
+- Add OTA log entry formatter ([ddf87d2](https://github.com/Whamp/pi-gcc/commit/ddf87d2))
+- Add gcc-init script and automated verification test ([45ca996](https://github.com/Whamp/pi-gcc/commit/45ca996))
+- Add AGENTS.md updater utility ([8c88bb3](https://github.com/Whamp/pi-gcc/commit/8c88bb3))
+- Add gcc_context tool with multi-resolution retrieval ([0f0441b](https://github.com/Whamp/pi-gcc/commit/0f0441b))
+- Add gcc_branch tool ([7dde42a](https://github.com/Whamp/pi-gcc/commit/7dde42a))
+- Add gcc_switch tool ([d5509d1](https://github.com/Whamp/pi-gcc/commit/d5509d1))
+- Add gcc_commit tool with 2-step commit flow ([b8c7d91](https://github.com/Whamp/pi-gcc/commit/b8c7d91))
+- Add gcc_merge tool ([d9299e5](https://github.com/Whamp/pi-gcc/commit/d9299e5))
+- Add OTA logger hook extractor ([3b88f7c](https://github.com/Whamp/pi-gcc/commit/3b88f7c))
+- Add context injector hook logic ([02e1dd1](https://github.com/Whamp/pi-gcc/commit/02e1dd1))
+- Add commit flow manager hook logic ([1597fec](https://github.com/Whamp/pi-gcc/commit/1597fec))
+- Wire GCC tools and lifecycle hooks in extension entry ([f53f452](https://github.com/Whamp/pi-gcc/commit/f53f452))
+- Make GCC init output cache-safe static AGENTS section ([cbe2961](https://github.com/Whamp/pi-gcc/commit/cbe2961))
+- Add state.yaml sessions tracking support ([56c71cc](https://github.com/Whamp/pi-gcc/commit/56c71cc))
+- Add subagent spawn module with task builder and output extractor ([acddc98](https://github.com/Whamp/pi-gcc/commit/acddc98))
+- Rewire gcc_commit to use subagent instead of 2-step flow ([00c2c67](https://github.com/Whamp/pi-gcc/commit/00c2c67))
+- Replace 2-step gcc_commit with subagent-based commit distillation ([578758f](https://github.com/Whamp/pi-gcc/commit/578758f))
+
+### 🩹 Fixes
+
+- Resolve lint, typecheck, and format issues in scaffold ([3a666db](https://github.com/Whamp/pi-gcc/commit/3a666db))
+- Sync session branch mapping on gcc_branch/gcc_switch and handle empty roadmap ([cf46a91](https://github.com/Whamp/pi-gcc/commit/cf46a91))
+- Add required YAML frontmatter to GCC skill ([01c5fce](https://github.com/Whamp/pi-gcc/commit/01c5fce))
+- Wire subagent to gcc-committer agent definition, clean up dead code and listener leak ([a4ac546](https://github.com/Whamp/pi-gcc/commit/a4ac546))
+
+### 💅 Refactors
+
+- Remove before_agent_start GCC context injection ([824758e](https://github.com/Whamp/pi-gcc/commit/824758e))
+- Stop dynamic root AGENTS updates from GCC runtime ([5feb5b0](https://github.com/Whamp/pi-gcc/commit/5feb5b0))
+- Reduce gcc_context to status overview contract ([cbc71a4](https://github.com/Whamp/pi-gcc/commit/cbc71a4))
+- Align GCC lifecycle hooks with canonical spec ([baef0a0](https://github.com/Whamp/pi-gcc/commit/baef0a0))
+- ExecuteGccCommit returns subagent task instead of agent prompt ([aa30304](https://github.com/Whamp/pi-gcc/commit/aa30304))
+- Move extractCommitBlocks to subagent module ([c0360bf](https://github.com/Whamp/pi-gcc/commit/c0360bf))
+
+### 📖 Documentation
+
+- Prepare for npm publish: add metadata, peer deps, LICENSE, exclude tests ([87cd48e](https://github.com/Whamp/pi-gcc/commit/87cd48e))
+- Add agent guide and novice README quick start ([fd2b18a](https://github.com/Whamp/pi-gcc/commit/fd2b18a))
+- Align GCC guidance with canonical cache-safe spec ([207ee93](https://github.com/Whamp/pi-gcc/commit/207ee93))
+- Add gcc-committer subagent spec, agent definition, and implementation plan ([068513b](https://github.com/Whamp/pi-gcc/commit/068513b))
+- Add manual E2E test plan with first run results ([5a29e19](https://github.com/Whamp/pi-gcc/commit/5a29e19))
+
+### 🏡 Chore
+
+- Add .worktrees to gitignore ([997f8e8](https://github.com/Whamp/pi-gcc/commit/997f8e8))
+- Delete commit-flow module (replaced by subagent) ([68e3f1c](https://github.com/Whamp/pi-gcc/commit/68e3f1c))
+
+### ✅ Tests
+
+- Add GCC module integration test ([8f5514e](https://github.com/Whamp/pi-gcc/commit/8f5514e))
+- Add extractFinalText coverage for pi JSON output parsing ([fcf0d4f](https://github.com/Whamp/pi-gcc/commit/fcf0d4f))
+- Update index tests for subagent commit flow, remove agent_end commit test ([ffd84c9](https://github.com/Whamp/pi-gcc/commit/ffd84c9))
+- Update integration test for new executeGccCommit return type ([404d344](https://github.com/Whamp/pi-gcc/commit/404d344))
