@@ -7,15 +7,35 @@ description: Use when working on a project with GCC (Git Context Controller) mem
 
 ## Initialization
 
-To initialize GCC in a project, run the init script using the absolute path derived
-from this skill's location:
+When the `<skill>` tag loads this file, it includes a `location` attribute with the
+absolute path to this SKILL.md. Use that to derive the init script path:
 
 ```bash
-bash "$(dirname "/path/to/this/SKILL.md")/scripts/gcc-init.sh"
+bash "/absolute/path/to/skills/gcc/scripts/gcc-init.sh"
 ```
 
-After the script runs, author `.gcc/main.md` — the project roadmap — based on your
-current understanding of the project's goals, milestones, and priorities.
+Replace `/absolute/path/to/skills/gcc` with the skill directory shown in the
+`<skill>` tag's `location` attribute (strip the `/SKILL.md` suffix).
+
+### After Init
+
+1. **Write `.gcc/main.md`** — the project roadmap (see below).
+2. **Call `gcc_context`** to verify GCC is active.
+3. **Make your first commit** when you reach a meaningful milestone.
+
+### Writing main.md — Greenfield vs Brownfield
+
+**New project (no existing code):** Write goals, intended architecture, and open
+questions as you understand them from conversation with the user.
+
+**Existing project:** Orient yourself first:
+
+- Read `AGENTS.md`, `README.md`, `package.json` (or equivalent)
+- Scan recent git history (`git log --oneline -20`)
+- Read any specs or plans in `docs/`
+
+Then write the roadmap covering: project purpose, current state, key decisions
+already made, completed milestones, and planned work.
 
 ## When to Commit
 
@@ -29,21 +49,11 @@ current understanding of the project's goals, milestones, and priorities.
 
 - Focus on decisions and rationale, not implementation details
 - Capture "why" more than "what" — the code captures "what"
-- The rolling progress summary must be self-contained — a new agent reading only
-  the latest commit should understand the full branch history
 - Be specific: "Chose PostgreSQL over MongoDB because ACID compliance is required
   for financial transactions" not "Chose database"
 
-### Commit Blocks
-
-Each `gcc_commit` produces three blocks:
-
-1. **Branch Purpose** — Restate or refine the purpose of this branch (1-2 sentences)
-2. **Previous Progress Summary** — Rolling compression of all prior commits.
-   Synthesize the previous summary with the last commit's contribution into a
-   single self-contained summary.
-3. **This Commit's Contribution** — What was just learned, decided, or understood.
-   3-7 concise bullets. Focus on decisions, rationale, and negative results.
+A subagent handles commit distillation — it reads your `log.md` and prior commits,
+then produces the structured commit entry. You just provide a good `summary` string.
 
 ## When to Branch
 
