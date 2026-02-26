@@ -19,9 +19,11 @@ Replace `/absolute/path/to/skills/gcc` with the skill directory shown in the
 
 ### After Init
 
-1. **Write `.gcc/main.md`** — the project roadmap (see below).
-2. **Call `gcc_context`** to verify GCC is active.
-3. **Make your first commit** when you reach a meaningful milestone.
+1. **Tell the user to run `/reload`** — the GCC tools won't detect the new `.gcc/`
+   directory until the extension reloads.
+2. **Write `.gcc/main.md`** — the project roadmap (see below).
+3. **Call `gcc_context`** to verify GCC is active.
+4. **Make your first commit** when you reach a meaningful milestone.
 
 ### Writing main.md — Greenfield vs Brownfield
 
