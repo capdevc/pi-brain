@@ -5,7 +5,7 @@ Versioned memory for the [pi coding agent](https://github.com/badlogic/pi-mono).
 ## Getting Started
 
 ```bash
-pi install git:github.com/Whamp/pi-brain
+pi install npm:pi-brain
 ```
 
 Open pi in any project and say "initialize Brain" (or run `/skill:brain`). The agent creates `.memory/` and starts remembering.
@@ -68,17 +68,23 @@ Everything in `.memory/` is tracked in git except `log.md` (transient working st
 ## Install Options
 
 ```bash
-# Latest from git
+# From npm (recommended)
+pi install npm:pi-brain
+
+# From git (latest)
 pi install git:github.com/Whamp/pi-brain
 
-# Pinned version
+# Pinned version (npm)
+pi install npm:pi-brain@0.1.0
+
+# Pinned version (git)
 pi install git:github.com/Whamp/pi-brain@v0.1.0
 
 # Project-local (shared via .pi/settings.json)
-pi install -l git:github.com/Whamp/pi-brain
+pi install -l npm:pi-brain
 
 # Try without installing
-pi -e git:github.com/Whamp/pi-brain
+pi -e npm:pi-brain
 ```
 
 ## Development
