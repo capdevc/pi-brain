@@ -3,11 +3,13 @@
   "version": "0.1.1",
   "description": "Versioned memory extension for the pi coding agent",
   "keywords": [
+    "agent-memory",
     "brain",
     "context",
     "memory",
     "pi",
     "pi-coding-agent",
+    "pi-extension",
     "pi-package"
   ],
   "homepage": "https://github.com/Whamp/pi-brain#readme",
