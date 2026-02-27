@@ -6,6 +6,8 @@
 
 Versioned memory for the [pi coding agent](https://github.com/badlogic/pi-mono). Agents commit decisions and reasoning to a `.memory/` directory, preserving context across sessions, compactions, and model switches.
 
+Credit: This project is my implementation for Pi of this paper [Git Context Controller: Manage the Context of LLM-based Agents like Git](https://arxiv.org/html/2508.00031v1) 
+
 ## Getting Started
 
 ```bash
