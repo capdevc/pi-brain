@@ -273,12 +273,11 @@ export default function activate(pi: ExtensionAPI) {
         `Brain: log.md is large (${sizeKB} KB). You should commit to distill this into structured memory.`,
         "warning"
       );
-    } else {
-      ctx.ui.notify(
-        `Brain active: branch "${state.activeBranch}" (${turnCount} uncommitted turn${turnCount === 1 ? "" : "s"}).`,
-        "info"
-      );
     }
+
+    const branch = state.activeBranch;
+    const turnLabel = `${turnCount} uncommitted turn${turnCount === 1 ? "" : "s"}`;
+    ctx.ui.setStatus("brain", `Brain: ${branch} (${turnLabel})`);
   });
 
   pi.on("resources_discover", () => ({

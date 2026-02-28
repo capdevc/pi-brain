@@ -19,11 +19,12 @@ Replace `/absolute/path/to/skills/brain` with the skill directory shown in the
 
 ### After Init
 
-1. **Tell the user to run `/reload`** — the memory tools won't detect the new `.memory/`
-   directory until the extension reloads.
-2. **Write `.memory/main.md`** — the project roadmap (see below).
-3. **Call `memory_status`** to verify Brain is active.
-4. **Make your first commit** when you reach a meaningful milestone.
+1. **Write `.memory/main.md`** — the project roadmap (see below).
+2. **Call `memory_status`** to verify Brain is active.
+3. **Make your first commit** when you reach a meaningful milestone.
+
+> **Note:** No `/reload` is needed. The memory tools lazily detect `.memory/`
+> on every call via `tryLoad()`.
 
 ### Writing main.md — Greenfield vs Brownfield
 

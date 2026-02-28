@@ -20,7 +20,9 @@ interface RegisteredHandler {
 
 interface MockUi {
   notifications: { message: string; type: "info" | "warning" | "error" }[];
+  statuses: Map<string, string | undefined>;
   notify: (message: string, type?: "info" | "warning" | "error") => void;
+  setStatus: (key: string, text: string | undefined) => void;
 }
 
 interface MockPi {
@@ -34,10 +36,19 @@ function createMockUi(): MockUi {
     message: string;
     type: "info" | "warning" | "error";
   }[] = [];
+  const statuses = new Map<string, string | undefined>();
   return {
     notifications,
+    statuses,
     notify(message: string, type: "info" | "warning" | "error" = "info") {
       notifications.push({ message, type });
+    },
+    setStatus(key: string, text: string | undefined) {
+      if (text === undefined) {
+        statuses.delete(key);
+      } else {
+        statuses.set(key, text);
+      }
     },
   };
 }
@@ -252,6 +263,74 @@ describe("extensionWiring", () => {
       expect(ui.notifications[0].type).toBe("warning");
       expect(ui.notifications[0].message).toContain("log.md is large");
       expect(ui.notifications[0].message).toContain("should commit");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("should set footer status on session_start for initialized project", async () => {
+    // Arrange
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ui = createMockUi();
+      const ctx = {
+        cwd: projectDir,
+        ui,
+        sessionManager: {
+          getSessionFile: () => "/tmp/pi-session-status.jsonl",
+        },
+      } as unknown as ExtensionContext;
+
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+
+      // Act
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      // Assert — should set persistent footer status
+      expect(ui.statuses.get("brain")).toContain("main");
+      expect(ui.statuses.get("brain")).toContain("1 uncommitted turn");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("should set footer status even when log.md is large", async () => {
+    // Arrange
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const logPath = path.join(
+        projectDir,
+        ".memory",
+        "branches",
+        "main",
+        "log.md"
+      );
+      fs.writeFileSync(logPath, "x".repeat(700 * 1024));
+
+      const ui = createMockUi();
+      const ctx = {
+        cwd: projectDir,
+        ui,
+        sessionManager: {
+          getSessionFile: () => "/tmp/pi-session-large-status.jsonl",
+        },
+      } as unknown as ExtensionContext;
+
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+
+      // Act
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      // Assert — warning notification AND footer status
+      expect(ui.notifications).toHaveLength(1);
+      expect(ui.notifications[0].type).toBe("warning");
+      expect(ui.statuses.get("brain")).toContain("main");
     } finally {
       cleanup();
     }
