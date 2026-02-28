@@ -128,8 +128,19 @@ function getFirstText(result: AgentToolResult<unknown> | undefined): string {
   return first.text;
 }
 
+function createCtx(projectDir: string): ExtensionContext {
+  const ui = createMockUi();
+  return {
+    cwd: projectDir,
+    ui,
+    sessionManager: {
+      getSessionFile: () => "/tmp/pi-session-test.jsonl",
+    },
+  } as unknown as ExtensionContext;
+}
+
 describe("extensionWiring", () => {
-  it("should register all memory tools and required event handlers", () => {
+  it("should register 2 memory tools and required event handlers", () => {
     // Arrange
     const mockPi = createMockPi();
 
@@ -138,19 +149,15 @@ describe("extensionWiring", () => {
 
     // Assert
     const toolNames = mockPi.tools.map((t) => t.name);
-    expect(toolNames).toHaveLength(5);
+    expect(toolNames).toHaveLength(2);
     expect(toolNames).toContain("memory_branch");
     expect(toolNames).toContain("memory_commit");
-    expect(toolNames).toContain("memory_status");
-    expect(toolNames).toContain("memory_merge");
-    expect(toolNames).toContain("memory_switch");
 
     const handlerNames = mockPi.handlers.map((h) => h.event);
     expect(handlerNames).toContain("turn_end");
-    expect(handlerNames).not.toContain("before_agent_start");
-    expect(handlerNames).not.toContain("agent_end");
+    expect(handlerNames).toContain("before_agent_start");
     expect(handlerNames).toContain("session_start");
-    expect(handlerNames).not.toContain("session_shutdown");
+    expect(handlerNames).toContain("session_compact");
     expect(handlerNames).toContain("session_before_compact");
     expect(handlerNames).toContain("resources_discover");
   });
@@ -160,23 +167,21 @@ describe("extensionWiring", () => {
     const mockPi = createMockPi();
     activate(mockPi.api);
 
-    const ui = createMockUi();
-    const ctx = {
-      cwd: fs.mkdtempSync(path.join(os.tmpdir(), "memory-uninit-")),
-      ui,
-    } as unknown as ExtensionContext;
+    const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "memory-uninit-"));
 
     try {
+      const ctx = createCtx(projectDir);
+
       const sessionStart = getHandler(mockPi.handlers, "session_start");
       await sessionStart?.({ type: "session_start" }, ctx);
 
-      const memoryStatus = mockPi.tools.find((t) => t.name === "memory_status");
-      expect(memoryStatus).toBeDefined();
+      const memoryBranch = mockPi.tools.find((t) => t.name === "memory_branch");
+      expect(memoryBranch).toBeDefined();
 
       // Act
-      const result = await memoryStatus?.execute(
+      const result = await memoryBranch?.execute(
         "tc1",
-        { level: "status" },
+        { action: "create", name: "test", purpose: "test" },
         undefined,
         undefined,
         ctx
@@ -187,7 +192,7 @@ describe("extensionWiring", () => {
       expect(result?.details).toStrictEqual({});
       expect(getFirstText(result)).toContain("Brain not initialized");
     } finally {
-      fs.rmSync((ctx as { cwd: string }).cwd, { recursive: true, force: true });
+      fs.rmSync(projectDir, { recursive: true, force: true });
     }
   });
 
@@ -198,14 +203,7 @@ describe("extensionWiring", () => {
       const mockPi = createMockPi();
       activate(mockPi.api);
 
-      const ui = createMockUi();
-      const ctx = {
-        cwd: projectDir,
-        ui,
-        sessionManager: {
-          getSessionFile: () => "/tmp/pi-session-123.jsonl",
-        },
-      } as unknown as ExtensionContext;
+      const ctx = createCtx(projectDir);
 
       const sessionStart = getHandler(mockPi.handlers, "session_start");
 
@@ -220,8 +218,8 @@ describe("extensionWiring", () => {
       );
 
       expect(stateYaml).toContain("sessions:");
-      expect(stateYaml).toContain("/tmp/pi-session-123.jsonl");
-      const matches = stateYaml.match(/\/tmp\/pi-session-123\.jsonl/g);
+      expect(stateYaml).toContain("/tmp/pi-session-test.jsonl");
+      const matches = stateYaml.match(/\/tmp\/pi-session-test\.jsonl/g);
       expect(matches?.length).toBe(1);
     } finally {
       cleanup();
@@ -343,10 +341,9 @@ describe("extensionWiring", () => {
       const mockPi = createMockPi();
       activate(mockPi.api);
 
-      const ui = createMockUi();
       const ctx = {
         cwd: projectDir,
-        ui,
+        ui: createMockUi(),
         sessionManager: {
           getSessionFile: () => "/tmp/pi-session-branch-sync.jsonl",
         },
@@ -361,7 +358,11 @@ describe("extensionWiring", () => {
       // Act
       await memoryBranch?.execute(
         "tc-branch-sync",
-        { name: "feature-x", purpose: "Investigate branch sync" },
+        {
+          action: "create",
+          name: "feature-x",
+          purpose: "Investigate branch sync",
+        },
         undefined,
         undefined,
         ctx
@@ -389,8 +390,7 @@ describe("extensionWiring", () => {
     const resourcesDiscover = getHandler(mockPi.handlers, "resources_discover");
     expect(resourcesDiscover).toBeDefined();
 
-    const ui = createMockUi();
-    const ctx = { cwd: process.cwd(), ui } as unknown as ExtensionContext;
+    const ctx = createCtx(process.cwd());
 
     // Act
     const result = (await resourcesDiscover?.(
@@ -413,25 +413,18 @@ describe("extensionWiring", () => {
       const mockPi = createMockPi();
       activate(mockPi.api);
 
-      const ui = createMockUi();
-      const ctx = {
-        cwd: projectDir,
-        ui,
-        sessionManager: {
-          getSessionFile: () => "/tmp/pi-session-lazy.jsonl",
-        },
-      } as unknown as ExtensionContext;
+      const ctx = createCtx(projectDir);
 
       // session_start fires with no .memory/ directory
       const sessionStart = getHandler(mockPi.handlers, "session_start");
       await sessionStart?.({ type: "session_start" }, ctx);
 
-      const memoryStatus = mockPi.tools.find((t) => t.name === "memory_status");
+      const memoryBranch = mockPi.tools.find((t) => t.name === "memory_branch");
 
       // Tool returns "not initialized" before .memory/ exists
-      const before = await memoryStatus?.execute(
+      const before = await memoryBranch?.execute(
         "tc-lazy-before",
-        {},
+        { action: "create", name: "test", purpose: "test" },
         undefined,
         undefined,
         ctx
@@ -454,10 +447,10 @@ describe("extensionWiring", () => {
       );
       fs.writeFileSync(path.join(branchDir, "metadata.yaml"), "");
 
-      // Act
-      const after = await memoryStatus?.execute(
+      // Act — switch action to verify lazy loading
+      const after = await memoryBranch?.execute(
         "tc-lazy-after",
-        {},
+        { action: "switch", branch: "main" },
         undefined,
         undefined,
         ctx
@@ -471,7 +464,7 @@ describe("extensionWiring", () => {
         path.join(projectDir, ".memory", "state.yaml"),
         "utf8"
       );
-      expect(stateYaml).toContain("/tmp/pi-session-lazy.jsonl");
+      expect(stateYaml).toContain("/tmp/pi-session-test.jsonl");
     } finally {
       fs.rmSync(projectDir, { recursive: true, force: true });
     }
@@ -484,14 +477,7 @@ describe("extensionWiring", () => {
       const mockPi = createMockPi();
       activate(mockPi.api);
 
-      const ui = createMockUi();
-      const ctx = {
-        cwd: projectDir,
-        ui,
-        sessionManager: {
-          getSessionFile: () => "/tmp/pi-session-commit-fail.jsonl",
-        },
-      } as unknown as ExtensionContext;
+      const ctx = createCtx(projectDir);
 
       const sessionStart = getHandler(mockPi.handlers, "session_start");
       await sessionStart?.({ type: "session_start" }, ctx);
@@ -514,6 +500,131 @@ describe("extensionWiring", () => {
       // Assert
       expect(result?.content[0]?.type).toBe("text");
       expect(result?.details).toStrictEqual({});
+    } finally {
+      cleanup();
+    }
+  });
+
+  // --- before_agent_start hook ---
+
+  it("should inject status message on first before_agent_start", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ctx = createCtx(projectDir);
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      const beforeStart = getHandler(mockPi.handlers, "before_agent_start");
+      const result = (await beforeStart?.(
+        { type: "before_agent_start", prompt: "hello", systemPrompt: "..." },
+        ctx
+      )) as { message?: { content: string } } | undefined;
+
+      expect(result).toBeDefined();
+      expect(result?.message?.content).toContain("# Memory Status");
+      expect(result?.message?.content).toContain("Active branch:");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("should NOT inject status on subsequent before_agent_start calls", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ctx = createCtx(projectDir);
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      const beforeStart = getHandler(mockPi.handlers, "before_agent_start");
+      const event = {
+        type: "before_agent_start",
+        prompt: "hello",
+        systemPrompt: "...",
+      };
+
+      // First call injects
+      await beforeStart?.(event, ctx);
+      // Second call should not inject
+      const result2 = await beforeStart?.(event, ctx);
+
+      expect(result2).toBeUndefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("should re-inject status after session_start resets the flag", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ctx = createCtx(projectDir);
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      const beforeStart = getHandler(mockPi.handlers, "before_agent_start");
+      const event = {
+        type: "before_agent_start",
+        prompt: "hello",
+        systemPrompt: "...",
+      };
+
+      // First session: inject status
+      await sessionStart?.({ type: "session_start" }, ctx);
+      await beforeStart?.(event, ctx);
+
+      // Second call should not inject
+      const result2 = await beforeStart?.(event, ctx);
+      expect(result2).toBeUndefined();
+
+      // session_start fires again (session switch / reload) — resets the flag
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      // Now it should inject again
+      const result3 = (await beforeStart?.(event, ctx)) as
+        | { message?: { content: string } }
+        | undefined;
+      expect(result3).toBeDefined();
+      expect(result3?.message?.content).toContain("# Memory Status");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("should re-inject status after session_compact resets the flag", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ctx = createCtx(projectDir);
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      const beforeStart = getHandler(mockPi.handlers, "before_agent_start");
+      const sessionCompact = getHandler(mockPi.handlers, "session_compact");
+      const event = {
+        type: "before_agent_start",
+        prompt: "hello",
+        systemPrompt: "...",
+      };
+
+      // Initial session + first injection
+      await sessionStart?.({ type: "session_start" }, ctx);
+      await beforeStart?.(event, ctx);
+
+      // Compaction resets the flag
+      await sessionCompact?.({ type: "session_compact" }, ctx);
+
+      // Should inject again
+      const result = (await beforeStart?.(event, ctx)) as
+        | { message?: { content: string } }
+        | undefined;
+      expect(result).toBeDefined();
+      expect(result?.message?.content).toContain("# Memory Status");
     } finally {
       cleanup();
     }

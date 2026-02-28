@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { BranchManager } from "./branches.js";
 import { executeMemoryBranch } from "./memory-branch.js";
 import { executeMemoryCommit, finalizeMemoryCommit } from "./memory-commit.js";
-import { executeMemoryStatus } from "./memory-context.js";
+import { buildStatusView } from "./memory-context.js";
 import { formatOtaEntry } from "./ota-formatter.js";
 import { MemoryState } from "./state.js";
 
@@ -35,11 +35,13 @@ describe("integration", () => {
       // Act — create branch
       const branchResult = executeMemoryBranch(
         {
+          action: "create",
           name: "phase-3-hooks",
           purpose: "Implement hook extractors and extension wiring",
         },
         state,
-        branches
+        branches,
+        projectDir
       );
 
       // Assert — branch created
@@ -90,7 +92,8 @@ describe("integration", () => {
           "Added ota-logger/context-injector and verified behavior.",
         ].join("\n"),
         state,
-        branches
+        branches,
+        projectDir
       );
 
       // Assert — commit finalized, log cleared
@@ -99,22 +102,14 @@ describe("integration", () => {
       const logAfterCommit = branches.readLog("phase-3-hooks");
       expect(logAfterCommit).toBe("");
 
-      // Act — retrieve context
-      const statusView = executeMemoryStatus({}, state, branches, projectDir);
+      // Act — retrieve context via buildStatusView
+      const statusView = buildStatusView(state, branches, projectDir);
 
       // Assert — context contains commit info
       expect(statusView).toContain("phase-3-hooks");
       expect(statusView).toContain(
         "Added ota-logger/context-injector and verified behavior."
       );
-
-      const ignoredLevelView = executeMemoryStatus(
-        { level: "branch", branch: "phase-3-hooks" },
-        state,
-        branches,
-        projectDir
-      );
-      expect(ignoredLevelView).toContain("# Memory Status");
     } finally {
       fs.rmSync(projectDir, { recursive: true, force: true });
     }

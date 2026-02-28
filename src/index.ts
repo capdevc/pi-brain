@@ -13,9 +13,7 @@ import { BranchManager } from "./branches.js";
 import { LOG_SIZE_WARNING_BYTES } from "./constants.js";
 import { executeMemoryBranch } from "./memory-branch.js";
 import { executeMemoryCommit, finalizeMemoryCommit } from "./memory-commit.js";
-import { executeMemoryStatus } from "./memory-context.js";
-import { executeMemoryMerge } from "./memory-merge.js";
-import { executeMemorySwitch } from "./memory-switch.js";
+import { buildStatusView } from "./memory-context.js";
 import { formatOtaEntry } from "./ota-formatter.js";
 import { extractOtaInput } from "./ota-logger.js";
 import { MemoryState } from "./state.js";
@@ -85,6 +83,7 @@ function resolveSkillPath(): string {
 export default function activate(pi: ExtensionAPI) {
   let state: MemoryState | null = null;
   let branchManager: BranchManager | null = null;
+  let statusInjected = false;
 
   function tryLoad(ctx: ExtensionContext): boolean {
     if (isMemoryReady(state, branchManager)) {
@@ -105,95 +104,30 @@ export default function activate(pi: ExtensionAPI) {
   }
 
   pi.registerTool({
-    name: "memory_status",
-    label: "Memory Status",
-    description: "Retrieve agent memory status overview.",
-    parameters: Type.Object({
-      level: Type.Optional(Type.String()),
-      branch: Type.Optional(Type.String()),
-      commit: Type.Optional(Type.String()),
-      segment: Type.Optional(Type.String()),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      if (
-        !tryLoad(ctx) ||
-        !isMemoryReady(state, branchManager) ||
-        !branchManager
-      ) {
-        return createTextResult(MEMORY_NOT_INITIALIZED_MESSAGE);
-      }
-
-      return createTextResult(
-        executeMemoryStatus(params, state, branchManager, ctx.cwd)
-      );
-    },
-  });
-
-  pi.registerTool({
     name: "memory_branch",
     label: "Memory Branch",
-    description: "Create a new memory branch.",
-    parameters: Type.Object({
-      name: Type.String({ description: "Branch name" }),
-      purpose: Type.String({ description: "Why this branch exists" }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      if (
-        !tryLoad(ctx) ||
-        !isMemoryReady(state, branchManager) ||
-        !branchManager
-      ) {
-        return createTextResult(MEMORY_NOT_INITIALIZED_MESSAGE);
-      }
-
-      const previousBranch = state.activeBranch;
-      const result = executeMemoryBranch(params, state, branchManager);
-
-      if (state.activeBranch !== previousBranch) {
-        upsertCurrentSession(state, ctx);
-      }
-
-      return createTextResult(result);
-    },
-  });
-
-  pi.registerTool({
-    name: "memory_switch",
-    label: "Memory Switch",
-    description: "Switch to another memory branch.",
-    parameters: Type.Object({
-      branch: Type.String({ description: "Target branch name" }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      if (
-        !tryLoad(ctx) ||
-        !isMemoryReady(state, branchManager) ||
-        !branchManager
-      ) {
-        return createTextResult(MEMORY_NOT_INITIALIZED_MESSAGE);
-      }
-
-      const previousBranch = state.activeBranch;
-      const result = executeMemorySwitch(params, state, branchManager);
-
-      if (state.activeBranch !== previousBranch) {
-        upsertCurrentSession(state, ctx);
-      }
-
-      return createTextResult(result);
-    },
-  });
-
-  pi.registerTool({
-    name: "memory_merge",
-    label: "Memory Merge",
     description:
-      "Merge insights from one memory branch into the active branch.",
+      "Manage memory branches. Actions: create (new branch), switch (change active branch), merge (synthesize branch into current).",
     parameters: Type.Object({
-      branch: Type.String({ description: "Source branch to merge from" }),
-      synthesis: Type.String({
-        description: "Synthesized insight from source branch",
+      action: Type.String({
+        description: 'Action to perform: "create", "switch", or "merge"',
       }),
+      name: Type.Optional(
+        Type.String({ description: "Branch name (required for create)" })
+      ),
+      purpose: Type.Optional(
+        Type.String({
+          description: "Why this branch exists (required for create)",
+        })
+      ),
+      branch: Type.Optional(
+        Type.String({
+          description: "Target branch (required for switch and merge)",
+        })
+      ),
+      synthesis: Type.Optional(
+        Type.String({ description: "Synthesized insight (required for merge)" })
+      ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (
@@ -204,7 +138,14 @@ export default function activate(pi: ExtensionAPI) {
         return createTextResult(MEMORY_NOT_INITIALIZED_MESSAGE);
       }
 
-      return createTextResult(executeMemoryMerge(params, state, branchManager));
+      const previousBranch = state.activeBranch;
+      const result = executeMemoryBranch(params, state, branchManager, ctx.cwd);
+
+      if (state.activeBranch !== previousBranch) {
+        upsertCurrentSession(state, ctx);
+      }
+
+      return createTextResult(result);
     },
   });
 
@@ -258,6 +199,7 @@ export default function activate(pi: ExtensionAPI) {
     state = new MemoryState(ctx.cwd);
     state.load();
     branchManager = new BranchManager(ctx.cwd);
+    statusInjected = false;
 
     if (!state.isInitialized) {
       return;
@@ -279,6 +221,36 @@ export default function activate(pi: ExtensionAPI) {
     const branch = state.activeBranch;
     const turnLabel = `${turnCount} uncommitted turn${turnCount === 1 ? "" : "s"}`;
     ctx.ui.setStatus("brain", `Brain: ${branch} (${turnLabel})`);
+  });
+
+  pi.on("before_agent_start", (_event, ctx) => {
+    if (statusInjected) {
+      return;
+    }
+
+    if (
+      !tryLoad(ctx) ||
+      !isMemoryReady(state, branchManager) ||
+      !branchManager
+    ) {
+      return;
+    }
+
+    statusInjected = true;
+
+    const status = buildStatusView(state, branchManager, ctx.cwd);
+    return {
+      message: {
+        customType: "brain-status",
+        content: status,
+        display: "tool" as const,
+        details: {},
+      },
+    };
+  });
+
+  pi.on("session_compact", () => {
+    statusInjected = false;
   });
 
   pi.on("resources_discover", () => ({
