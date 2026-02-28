@@ -84,3 +84,24 @@ Initial development established the `pi-brain` extension (formerly `pi-gcc`) wit
 - Rejected "auto-commit on shutdown" as a strategy to avoid noisy/low-value memory entries, favoring proactive nudges instead.
 - Confirmed that UI-only footer status changes do not influence model context, reinforcing the necessity of explicit documentation-based guidance.
 - Triaged future UX improvements (session-shutdown reminders and milestone-based nudges) into project TODOs for deeper design.
+
+---
+
+## Commit 587516a0 | 2026-02-28T22:48:28.696Z
+
+### Branch Purpose
+
+Maintain the primary developmental roadmap and memory for the `pi-brain` extension, capturing core architectural decisions and evolution of the memory protocol.
+
+### Previous Progress Summary
+
+Initial development established the `pi-brain` extension (formerly `pi-gcc`) with lazy state initialization and a 600 KB log size threshold to manage context growth. Architectural milestones include migrating to the `memory_*` tool namespace, implementing autonomous subagent-based distillation, and enforcing prompt-cache safety invariants. The protocol was refined into a 2-tool model (`memory_commit`, `memory_branch`) with agent-driven initialization via the `brain` skill, supported by property-based testing and deterministic output sorting. Recently, the protocol was reinforced with an explicit 'When to Commit' checklist and regression tests to ensure consistent project orientation and checkpoint triggers.
+
+### This Commit's Contribution
+
+- Implemented a roadmap update reminder in `memory_commit` to address the issue of silent roadmap drift during development.
+- Chose an "always-on" default for the reminder, requiring an explicit opt-out via `update_roadmap: false` to ensure agents prioritize roadmap maintenance.
+- Formalized roadmap maintenance as a core project convention in `SKILL.md` and `.memory/AGENTS.md` templates.
+- Resolved discrepancies between documentation and implementation by correcting the project roadmap to reflect the 2-tool model.
+- Established regression coverage for the reminder's opt-out behavior and presence in the tool output.
+- Published v0.1.5 to baseline these protocol-enforcement improvements and documentation baselines.

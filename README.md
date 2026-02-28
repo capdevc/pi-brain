@@ -6,7 +6,7 @@
 
 Versioned memory for the [pi coding agent](https://github.com/badlogic/pi-mono). Agents commit decisions and reasoning to a `.memory/` directory, preserving context across sessions, compactions, and model switches.
 
-Credit: This project is my implementation for Pi of this paper [Git Context Controller: Manage the Context of LLM-based Agents like Git](https://arxiv.org/html/2508.00031v1) 
+Credit: This project is my implementation for Pi of this paper [Git Context Controller: Manage the Context of LLM-based Agents like Git](https://arxiv.org/html/2508.00031v1)
 
 ## Getting Started
 
@@ -16,7 +16,7 @@ pi install npm:pi-brain
 
 Open pi in any project and say "initialize Brain" (or run `/skill:brain`). The agent creates `.memory/` and starts remembering.
 
-That's it. The agent decides when to commit, branch, and merge — you don't **need** to manage anything. However, you can always prompt the agent to remember something specific if you'd like. 
+That's it. The agent decides when to commit, branch, and merge — you don't **need** to manage anything. However, you can always prompt the agent to remember something specific if you'd like.
 
 ## How It Works
 

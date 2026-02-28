@@ -262,7 +262,7 @@ describe("finalizeMemoryCommit", () => {
       tmpDir
     );
 
-    expect(message).toContain("**Action required:** Update `.memory/main.md`");
+    expect(message).toContain("**Action required:** Re-read `.memory/main.md`");
   });
 
   it("should suppress roadmap update reminder when update_roadmap is false", () => {

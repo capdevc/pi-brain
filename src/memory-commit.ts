@@ -65,7 +65,7 @@ export function finalizeMemoryCommit(
   const roadmapReminder =
     updateRoadmap === false
       ? ""
-      : "\n\n**Action required:** Update `.memory/main.md` to reflect this commit — current state, decisions, and milestones. The roadmap is the first thing new sessions read.";
+      : "\n\n**Action required:** Re-read `.memory/main.md` in full and rewrite stale sections. Current State should describe what is true right now — curate, don't just append.";
 
   return `${resultText}\n\n${status}${roadmapReminder}`;
 }

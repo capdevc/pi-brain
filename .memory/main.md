@@ -6,7 +6,7 @@ pi-brain gives pi coding agents versioned memory via a `.memory/` directory. Age
 
 ## Current State (2026-02-28)
 
-**v0.1.4 published. Renamed from pi-gcc to pi-brain.** Core tooling is feature-complete:
+**v0.1.5 published. Renamed from pi-gcc to pi-brain.** Core tooling is feature-complete:
 
 - 2 tools: `memory_commit` (checkpoint), `memory_branch` (create/switch/merge)
 - Lifecycle hooks: `turn_end` (OTA logging), `session_start` (registration), `session_before_compact` (awareness note)

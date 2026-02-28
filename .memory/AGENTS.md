@@ -58,4 +58,4 @@ Call `memory_commit` when one of these is true:
 - **Rolling summaries**: Each commit re-synthesizes all prior progress
 - **No direct log.md writes**: The extension maintains log.md automatically
 - **Status is automatic**: Memory status is injected at session start and appended to tool results (compact/truncated when large; use `read .memory/main.md` for full roadmap)
-- **Keep main.md current**: After every commit, update `.memory/main.md` to reflect the new state — current state, decisions, and milestones. The roadmap is the first thing new sessions read; stale roadmaps cause wrong orientation. For trivial commits that don't change project state (e.g., minor refactors), pass `update_roadmap: false` to skip the reminder.
+- **Keep main.md current**: After every commit, re-read `.memory/main.md` in full and rewrite stale sections. Current State should describe what is true _right now_ — remove historical context that belongs in Key Decisions or Milestones. The goal is curation, not accumulation. For trivial commits that don't change project state, pass `update_roadmap: false` to skip the reminder.

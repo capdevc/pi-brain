@@ -78,13 +78,21 @@ then produces the structured commit entry. You just provide a good `summary` str
 
 ## After Every Commit
 
-**Update `.memory/main.md` to reflect the current state.** The roadmap is the first
+**Re-read `.memory/main.md` and rewrite stale sections.** The roadmap is the first
 thing a new session reads — if it's stale, every future session starts with a wrong
-picture. After `memory_commit` returns, review and update:
+picture. This means genuine review, not mechanical edits.
 
-- **Current State** section — reflect what's actually true now
-- **Key Decisions Made** — add any new decisions from this commit
-- **Milestones** — move completed items, add new planned ones
+After `memory_commit` returns:
+
+1. Read `.memory/main.md` in full.
+2. Rewrite the **Current State** section to describe what is true _right now_ — remove
+   historical context that has migrated to Key Decisions or Milestones.
+3. Add any new entries to **Key Decisions Made**.
+4. Move completed items in **Milestones** and add new planned ones.
+5. Remove or rewrite anything a new reader would find misleading.
+
+The goal is curation, not accumulation. A reader of Current State should understand
+the project as it exists today without wading through history.
 
 For trivial commits that don't change the project's state, decisions, or milestones
 (e.g., minor refactors, typo fixes), you can pass `update_roadmap: false` to skip
