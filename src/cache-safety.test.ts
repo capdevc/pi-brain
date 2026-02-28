@@ -151,4 +151,102 @@ describe("cache safety invariants", () => {
       { numRuns: 60 }
     );
   });
+
+  it("injects at most one brain-status message per epoch and resets on session events", async () => {
+    const opArb = fc.array(
+      fc.constantFrom(
+        "before_agent_start",
+        "session_start",
+        "session_switch",
+        "session_compact"
+      ),
+      { minLength: 1, maxLength: 80 }
+    );
+
+    await fc.assert(
+      fc.asyncProperty(opArb, async (ops) => {
+        const { projectDir, cleanup } = setupInitializedProject();
+        try {
+          const mockPi = createMockPi();
+          activate(mockPi.api);
+
+          const getHandler = (name: string) =>
+            mockPi.handlers.find((h) => h.event === name)?.handler;
+          const beforeStart = getHandler("before_agent_start");
+          const onSessionStart = getHandler("session_start");
+          const onSessionSwitch = getHandler("session_switch");
+          const onSessionCompact = getHandler("session_compact");
+
+          const ctx = {
+            cwd: projectDir,
+            ui: { notify() {}, setStatus() {} },
+            sessionManager: {
+              getSessionFile: () => "/tmp/pi-cache-safety.jsonl",
+            },
+          } as unknown as ExtensionContext;
+
+          let canInject = true;
+
+          for (const op of ops) {
+            if (op === "session_start") {
+              await onSessionStart?.({ type: "session_start" }, ctx);
+              canInject = true;
+              continue;
+            }
+
+            if (op === "session_switch") {
+              await onSessionSwitch?.(
+                {
+                  type: "session_switch",
+                  reason: "resume",
+                  previousSessionFile: "/tmp/prev.jsonl",
+                },
+                ctx
+              );
+              canInject = true;
+              continue;
+            }
+
+            if (op === "session_compact") {
+              await onSessionCompact?.({ type: "session_compact" }, ctx);
+              canInject = true;
+              continue;
+            }
+
+            const result = (await beforeStart?.(
+              { type: "before_agent_start", prompt: "p", systemPrompt: "base" },
+              ctx
+            )) as { message?: { customType?: string } } | undefined;
+
+            const actual = result
+              ? {
+                  hasResult: true,
+                  customType: result.message?.customType,
+                }
+              : {
+                  hasResult: false,
+                  customType: undefined,
+                };
+
+            const expected = canInject
+              ? {
+                  hasResult: true,
+                  customType: "brain-status",
+                }
+              : {
+                  hasResult: false,
+                  customType: undefined,
+                };
+
+            expect(actual).toStrictEqual(expected);
+
+            canInject = false;
+          }
+        } finally {
+          cleanup();
+        }
+      }),
+      { numRuns: 40 }
+    );
+  });
 });
