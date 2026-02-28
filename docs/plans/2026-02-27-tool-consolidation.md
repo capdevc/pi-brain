@@ -2,35 +2,26 @@
 
 > **REQUIRED SUB-SKILL:** Use the executing-plans skill to implement this plan task-by-task.
 
-**Goal:** Reduce Brain's tool surface from 5 tools to 2, eliminate `memory_status` as a tool, and conditionally register tools only in Brain-enabled projects — all without breaking prompt cache.
-
-**Architecture:** Consolidate `memory_branch`, `memory_switch`, `memory_merge` into a single `memory_branch` tool with an `action` parameter. Remove `memory_status` tool entirely — status is appended to mutation tool results and orientation happens via `read` tool. Register tools conditionally at `session_start` only when `.memory/` exists. Skill remains globally discoverable via `resources_discover` (lightweight — just a name and path in `<available_skills>`).
+**Goal:** Reduce Brain's tool surface from 5 tools to 2. Consolidate `memory_branch`, `memory_switch`, `memory_merge` into a single `memory_branch` tool with an `action` parameter. Remove the `memory_status` tool — status is injected via the `before_agent_start` hook on first invocation and appended to `memory_branch` and `memory_commit` results.
 
 **Tech Stack:** TypeScript (ESM), vitest, pi extension API
-
-**Cache safety rules (from HOW-CACHING-WORKS.md):**
-
-- Never change tool definitions mid-session
-- Never modify the system prompt per-turn
-- Status updates must arrive as append-only tool results, never as injected messages
-- Tools are registered once at `session_start` and remain stable for the session
 
 ---
 
 ## Phase 1: Consolidate Branch Operations (3 → 1 tool)
 
-### Task 1: Create the unified `memory-branch-unified.ts` module
+### Task 1: Expand `memory-branch.ts` to handle create, switch, and merge actions
 
-**TDD scenario:** New feature — full TDD cycle
+**TDD scenario:** Modifying tested code — `memory-branch.ts` and `memory-branch.test.ts` already exist.
 
 **Files:**
 
-- Create: `src/memory-branch-unified.ts`
-- Create: `src/memory-branch-unified.test.ts`
+- Modify: `src/memory-branch.ts`
+- Modify: `src/memory-branch.test.ts`
 
-**Step 1: Write the failing tests**
+**Step 1: Write failing tests**
 
-Create `src/memory-branch-unified.test.ts`:
+Replace the contents of `src/memory-branch.test.ts`. The existing 3 tests cover create-only behavior. Rewrite to test all three actions through a single `executeMemoryBranch` function that now takes an `action` parameter.
 
 ```typescript
 import * as fs from "node:fs";
@@ -38,18 +29,16 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { BranchManager } from "./branches.js";
-import { executeMemoryBranchUnified } from "./memory-branch-unified.js";
+import { executeMemoryBranch } from "./memory-branch.js";
 import { MemoryState } from "./state.js";
 
-describe("executeMemoryBranchUnified", () => {
+describe("executeMemoryBranch", () => {
   let tmpDir: string;
   let state: MemoryState;
   let branches: BranchManager;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "memory-branch-unified-test-")
-    );
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "memory-branch-tool-test-"));
     const memoryDir = path.join(tmpDir, ".memory");
     fs.mkdirSync(path.join(memoryDir, "branches"), { recursive: true });
 
@@ -74,7 +63,7 @@ describe("executeMemoryBranchUnified", () => {
   // --- create action ---
 
   it("should create a new branch and switch to it", () => {
-    const result = executeMemoryBranchUnified(
+    const result = executeMemoryBranch(
       { action: "create", name: "explore-redis", purpose: "Evaluate Redis" },
       state,
       branches
@@ -85,8 +74,19 @@ describe("executeMemoryBranchUnified", () => {
     expect(state.activeBranch).toBe("explore-redis");
   });
 
+  it("should initialize commits.md with branch purpose", () => {
+    executeMemoryBranch(
+      { action: "create", name: "explore-redis", purpose: "Evaluate Redis" },
+      state,
+      branches
+    );
+
+    const commits = branches.readCommits("explore-redis");
+    expect(commits).toContain("Evaluate Redis");
+  });
+
   it("should reject duplicate branch names on create", () => {
-    const result = executeMemoryBranchUnified(
+    const result = executeMemoryBranch(
       { action: "create", name: "main", purpose: "Duplicate" },
       state,
       branches
@@ -96,11 +96,7 @@ describe("executeMemoryBranchUnified", () => {
   });
 
   it("should require name and purpose for create", () => {
-    const result = executeMemoryBranchUnified(
-      { action: "create" },
-      state,
-      branches
-    );
+    const result = executeMemoryBranch({ action: "create" }, state, branches);
 
     expect(result).toContain("required");
   });
@@ -110,7 +106,7 @@ describe("executeMemoryBranchUnified", () => {
   it("should switch to an existing branch", () => {
     branches.createBranch("feature-x", "Feature X");
 
-    const result = executeMemoryBranchUnified(
+    const result = executeMemoryBranch(
       { action: "switch", branch: "feature-x" },
       state,
       branches
@@ -127,7 +123,7 @@ describe("executeMemoryBranchUnified", () => {
       "\n---\n\n## Commit a1b2c3d4 | 2026-02-22\n\n### This Commit's Contribution\n\nRedis is viable.\n"
     );
 
-    const result = executeMemoryBranchUnified(
+    const result = executeMemoryBranch(
       { action: "switch", branch: "feature-x" },
       state,
       branches
@@ -137,7 +133,7 @@ describe("executeMemoryBranchUnified", () => {
   });
 
   it("should reject switching to nonexistent branch", () => {
-    const result = executeMemoryBranchUnified(
+    const result = executeMemoryBranch(
       { action: "switch", branch: "nope" },
       state,
       branches
@@ -148,11 +144,7 @@ describe("executeMemoryBranchUnified", () => {
   });
 
   it("should require branch for switch", () => {
-    const result = executeMemoryBranchUnified(
-      { action: "switch" },
-      state,
-      branches
-    );
+    const result = executeMemoryBranch({ action: "switch" }, state, branches);
 
     expect(result).toContain("required");
   });
@@ -166,7 +158,7 @@ describe("executeMemoryBranchUnified", () => {
       "\n---\n\n## Commit a1b2c3d4 | 2026-02-22\n\n### This Commit's Contribution\n\nRedis is viable.\n"
     );
 
-    const result = executeMemoryBranchUnified(
+    const result = executeMemoryBranch(
       {
         action: "merge",
         branch: "explore-redis",
@@ -183,7 +175,7 @@ describe("executeMemoryBranchUnified", () => {
   });
 
   it("should reject merging a branch into itself", () => {
-    const result = executeMemoryBranchUnified(
+    const result = executeMemoryBranch(
       { action: "merge", branch: "main", synthesis: "Self merge." },
       state,
       branches
@@ -193,7 +185,7 @@ describe("executeMemoryBranchUnified", () => {
   });
 
   it("should reject merging a nonexistent branch", () => {
-    const result = executeMemoryBranchUnified(
+    const result = executeMemoryBranch(
       { action: "merge", branch: "nonexistent", synthesis: "Missing." },
       state,
       branches
@@ -203,11 +195,7 @@ describe("executeMemoryBranchUnified", () => {
   });
 
   it("should require branch and synthesis for merge", () => {
-    const result = executeMemoryBranchUnified(
-      { action: "merge" },
-      state,
-      branches
-    );
+    const result = executeMemoryBranch({ action: "merge" }, state, branches);
 
     expect(result).toContain("required");
   });
@@ -216,7 +204,7 @@ describe("executeMemoryBranchUnified", () => {
     vi.setSystemTime(new Date("2026-02-22T16:00:00.000Z"));
     branches.createBranch("explore-redis", "Evaluate Redis");
 
-    executeMemoryBranchUnified(
+    executeMemoryBranch(
       {
         action: "merge",
         branch: "explore-redis",
@@ -234,11 +222,7 @@ describe("executeMemoryBranchUnified", () => {
   // --- invalid action ---
 
   it("should reject invalid action values", () => {
-    const result = executeMemoryBranchUnified(
-      { action: "delete" },
-      state,
-      branches
-    );
+    const result = executeMemoryBranch({ action: "delete" }, state, branches);
 
     expect(result).toContain("Unknown action");
   });
@@ -247,12 +231,12 @@ describe("executeMemoryBranchUnified", () => {
 
 **Step 2: Run tests to verify they fail**
 
-Run: `pnpm run test -- src/memory-branch-unified.test.ts`
-Expected: FAIL — module `./memory-branch-unified.js` does not exist
+Run: `pnpm run test -- src/memory-branch.test.ts`
+Expected: FAIL — current `executeMemoryBranch` does not accept `action` parameter
 
-**Step 3: Write the implementation**
+**Step 3: Rewrite `src/memory-branch.ts`**
 
-Create `src/memory-branch-unified.ts`:
+Replace the existing single-action implementation with a dispatcher that handles create, switch, and merge. The logic comes directly from the existing `memory-switch.ts` and `memory-merge.ts` modules.
 
 ```typescript
 import type { BranchManager } from "./branches.js";
@@ -362,7 +346,7 @@ function executeMerge(
  * Execute the unified memory_branch tool.
  * Actions: create, switch, merge.
  */
-export function executeMemoryBranchUnified(
+export function executeMemoryBranch(
   params: MemoryBranchParams,
   state: MemoryState,
   branches: BranchManager
@@ -382,209 +366,72 @@ export function executeMemoryBranchUnified(
 
 **Step 4: Run tests to verify they pass**
 
-Run: `pnpm run test -- src/memory-branch-unified.test.ts`
-Expected: All 13 tests PASS
+Run: `pnpm run test -- src/memory-branch.test.ts`
+Expected: All 14 tests PASS
 
 **Step 5: Commit**
 
 ```bash
-git add src/memory-branch-unified.ts src/memory-branch-unified.test.ts
-git commit -m "feat: add unified memory_branch tool with create/switch/merge actions"
+git add src/memory-branch.ts src/memory-branch.test.ts
+git commit -m "feat: consolidate branch/switch/merge into single memory_branch tool"
 ```
 
 ---
 
-### Task 2: Build the status view helper for tool result injection
+## Phase 2: Replace `memory_status` with Hook Injection + Tool Result Appending
 
-**TDD scenario:** Modifying tested code — `memory-context.ts` already has tests. We're extracting `buildStatusView` into a shared helper that both mutation tools can call.
+### Task 2: Export `buildStatusView` from `memory-context.ts`
+
+**TDD scenario:** Modifying tested code.
 
 **Files:**
 
-- Modify: `src/memory-context.ts` — export the `buildStatusView` function
-- Modify: `src/memory-context.test.ts` — add test for the exported function name
+- Modify: `src/memory-context.ts` — export `buildStatusView`, remove `executeMemoryStatus`
+- Modify: `src/memory-context.test.ts` — rewrite tests to call `buildStatusView` directly
 
-**Step 1: Write the test that verifies the export**
+**Step 1: Rewrite tests to target `buildStatusView`**
 
-Add to `src/memory-context.test.ts`, a new test:
+In `src/memory-context.test.ts`, replace `executeMemoryStatus({}, state, branches, tmpDir)` with `buildStatusView(state, branches, tmpDir)` in every test. Remove the test for "unsupported level params" (no longer relevant — `buildStatusView` has no params). Update the import.
 
-```typescript
-it("should export buildStatusView as a named export", async () => {
-  const mod = await import("./memory-context.js");
-  expect(typeof mod.buildStatusView).toBe("function");
-});
-```
-
-**Step 2: Run test to verify it fails**
+**Step 2: Run tests to verify they fail**
 
 Run: `pnpm run test -- src/memory-context.test.ts`
-Expected: FAIL — `mod.buildStatusView` is undefined (currently not exported)
+Expected: FAIL — `buildStatusView` is not exported
 
-**Step 3: Export `buildStatusView` from `memory-context.ts`**
+**Step 3: Update `memory-context.ts`**
 
-In `src/memory-context.ts`, change the `buildStatusView` function from private to exported. Find line:
-
-```typescript
-function buildStatusView(
-```
-
-Replace with:
-
-```typescript
-export function buildStatusView(
-```
-
-Also update `executeMemoryStatus` to delegate (it already calls `buildStatusView`, so no logic change needed — just the export).
+- Add `export` to `buildStatusView`
+- Remove `executeMemoryStatus` function
+- Remove `import type { MemoryStatusParams }` from types
 
 **Step 4: Run tests to verify they pass**
 
 Run: `pnpm run test -- src/memory-context.test.ts`
-Expected: All 8 tests PASS (7 existing + 1 new)
+Expected: All 6 tests PASS
 
 **Step 5: Commit**
 
 ```bash
 git add src/memory-context.ts src/memory-context.test.ts
-git commit -m "refactor: export buildStatusView for use in mutation tool results"
+git commit -m "refactor: export buildStatusView, remove executeMemoryStatus"
 ```
 
 ---
 
-### Task 3: Append status to `memory_commit` and `memory_branch` results
+### Task 3: Append status to `memory_branch` and `memory_commit` results
 
-**TDD scenario:** Modifying tested code — update `finalizeMemoryCommit` and `executeMemoryBranchUnified` to append status view.
+**TDD scenario:** Modifying tested code.
 
 **Files:**
 
-- Modify: `src/memory-commit.ts` — `finalizeMemoryCommit` returns result + status
-- Modify: `src/memory-commit.test.ts` — verify status is included in result
-- Modify: `src/memory-branch-unified.ts` — each action returns result + status
-- Modify: `src/memory-branch-unified.test.ts` — verify status is included in results
+- Modify: `src/memory-branch.ts` — accept `projectDir`, append status on success
+- Modify: `src/memory-branch.test.ts` — verify status in results
+- Modify: `src/memory-commit.ts` — accept `projectDir` in `finalizeMemoryCommit`, append status
+- Modify: `src/memory-commit.test.ts` — verify status in results
 
-**Step 1: Write the failing test for commit**
+**Step 1: Write failing tests for `memory-branch.ts`**
 
-Add to `src/memory-commit.test.ts` in the `finalizeMemoryCommit` describe block:
-
-```typescript
-it("should include status view in the result", () => {
-  // Arrange
-  fs.writeFileSync(
-    path.join(tmpDir, ".memory/main.md"),
-    "# Roadmap\n\nGoals here.\n"
-  );
-  const commitContent =
-    "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nFirst milestone.\n";
-
-  // Act
-  const message = finalizeMemoryCommit(
-    "First milestone",
-    commitContent,
-    state,
-    branches,
-    tmpDir
-  );
-
-  // Assert
-  expect(message).toContain("Commit ");
-  expect(message).toContain("# Memory Status");
-  expect(message).toContain("Active branch: main");
-});
-```
-
-**Step 2: Run test to verify it fails**
-
-Run: `pnpm run test -- src/memory-commit.test.ts`
-Expected: FAIL — `finalizeMemoryCommit` does not accept `projectDir` parameter and result does not contain status
-
-**Step 3: Update `finalizeMemoryCommit` signature and implementation**
-
-In `src/memory-commit.ts`, add the import and update:
-
-```typescript
-import type { BranchManager } from "./branches.js";
-import { generateHash } from "./hash.js";
-import { buildStatusView } from "./memory-context.js";
-import type { MemoryState } from "./state.js";
-import { buildCommitterTask } from "./subagent.js";
-
-// ... executeMemoryCommit unchanged ...
-
-export function finalizeMemoryCommit(
-  summary: string,
-  commitContent: string,
-  state: MemoryState,
-  branches: BranchManager,
-  projectDir: string
-): string {
-  const branch = state.activeBranch;
-  const hash = generateHash();
-  const timestamp = new Date().toISOString();
-
-  const entry = [
-    "",
-    "---",
-    "",
-    `## Commit ${hash} | ${timestamp}`,
-    "",
-    commitContent,
-    "",
-  ].join("\n");
-
-  branches.appendCommit(branch, entry);
-  branches.clearLog(branch);
-
-  state.setLastCommit(branch, hash, timestamp, summary);
-  state.save();
-
-  const confirmation = `Commit ${hash} written to branch "${branch}".`;
-  const status = buildStatusView(state, branches, projectDir);
-
-  return `${confirmation}\n\n${status}`;
-}
-```
-
-**Step 4: Update existing `finalizeMemoryCommit` tests**
-
-All existing tests in `memory-commit.test.ts` call `finalizeMemoryCommit` with 4 args. Add `tmpDir` as the 5th argument to every call:
-
-```typescript
-finalizeMemoryCommit("First milestone", commitContent, state, branches, tmpDir);
-```
-
-Update every call site in the test file (4 calls total).
-
-**Step 5: Update the call site in `index.ts`**
-
-In `src/index.ts`, the `memory_commit` tool handler calls:
-
-```typescript
-const message = finalizeMemoryCommit(
-  params.summary,
-  commitContent,
-  state,
-  branchManager
-);
-```
-
-Add `ctx.cwd` as the 5th argument:
-
-```typescript
-const message = finalizeMemoryCommit(
-  params.summary,
-  commitContent,
-  state,
-  branchManager,
-  ctx.cwd
-);
-```
-
-**Step 6: Run tests to verify they pass**
-
-Run: `pnpm run test -- src/memory-commit.test.ts`
-Expected: All 8 tests PASS (7 existing + 1 new)
-
-**Step 7: Write the failing test for branch unified**
-
-Add to `src/memory-branch-unified.test.ts`:
+Add to `src/memory-branch.test.ts`:
 
 ```typescript
 it("should include status view in create result", () => {
@@ -593,7 +440,7 @@ it("should include status view in create result", () => {
     "# Roadmap\n\nGoals.\n"
   );
 
-  const result = executeMemoryBranchUnified(
+  const result = executeMemoryBranch(
     { action: "create", name: "test-branch", purpose: "Testing" },
     state,
     branches,
@@ -612,7 +459,7 @@ it("should include status view in switch result", () => {
     "# Roadmap\n\nGoals.\n"
   );
 
-  const result = executeMemoryBranchUnified(
+  const result = executeMemoryBranch(
     { action: "switch", branch: "feature-x" },
     state,
     branches,
@@ -631,7 +478,7 @@ it("should include status view in merge result", () => {
     "# Roadmap\n\nGoals.\n"
   );
 
-  const result = executeMemoryBranchUnified(
+  const result = executeMemoryBranch(
     {
       action: "merge",
       branch: "explore-redis",
@@ -647,7 +494,7 @@ it("should include status view in merge result", () => {
 });
 
 it("should NOT include status view in error results", () => {
-  const result = executeMemoryBranchUnified(
+  const result = executeMemoryBranch(
     { action: "switch", branch: "nonexistent" },
     state,
     branches,
@@ -659,700 +506,403 @@ it("should NOT include status view in error results", () => {
 });
 ```
 
-**Step 8: Run test to verify they fail**
-
-Run: `pnpm run test -- src/memory-branch-unified.test.ts`
-Expected: FAIL — function signature doesn't accept `projectDir`
-
-**Step 9: Update `executeMemoryBranchUnified` to accept `projectDir` and append status on success**
-
-Update the function signature and each action helper to accept and pass through `projectDir`. Import `buildStatusView`. Append status to successful results only (not error results).
-
-The key change in `src/memory-branch-unified.ts`:
-
-```typescript
-import { buildStatusView } from "./memory-context.js";
-
-// Each helper gets projectDir parameter added.
-// On success paths, append: `\n\n${buildStatusView(state, branches, projectDir)}`
-// On error paths (validation failures, not found), return the error string as-is.
-```
-
-Update all existing test calls in `memory-branch-unified.test.ts` to pass `tmpDir` as the 4th argument.
-
-**Step 10: Run all tests to verify they pass**
-
-Run: `pnpm run test -- src/memory-branch-unified.test.ts src/memory-commit.test.ts`
-Expected: All tests PASS
-
-**Step 11: Commit**
-
-```bash
-git add src/memory-commit.ts src/memory-commit.test.ts src/memory-branch-unified.ts src/memory-branch-unified.test.ts src/index.ts
-git commit -m "feat: append status view to mutation tool results"
-```
-
----
-
-## Phase 2: Rewire `index.ts` — Conditional Registration and Tool Replacement
-
-### Task 4: Replace 5 tools with 2 tools and conditional registration
-
-**TDD scenario:** Modifying tested code — `index.test.ts` has extensive wiring tests that must be updated.
-
-**Files:**
-
-- Modify: `src/index.ts` — full rewrite of tool registration
-- Modify: `src/index.test.ts` — update all wiring tests
-
-**Step 1: Update `index.test.ts` wiring test**
-
-Replace the "should register all memory tools" test with:
-
-```typescript
-it("should not register tools during activate (deferred to session_start)", () => {
-  // Arrange
-  const mockPi = createMockPi();
-
-  // Act
-  activate(mockPi.api);
-
-  // Assert — no tools registered yet
-  expect(mockPi.tools).toHaveLength(0);
-
-  const handlerNames = mockPi.handlers.map((h) => h.event);
-  expect(handlerNames).toContain("turn_end");
-  expect(handlerNames).toContain("session_start");
-  expect(handlerNames).toContain("session_before_compact");
-  expect(handlerNames).toContain("resources_discover");
-});
-```
-
-Add a new test:
-
-```typescript
-it("should register 2 tools on session_start when .memory/ exists", async () => {
-  // Arrange
-  const { projectDir, cleanup } = setupInitializedProject();
-  try {
-    const mockPi = createMockPi();
-    activate(mockPi.api);
-
-    const ui = createMockUi();
-    const ctx = {
-      cwd: projectDir,
-      ui,
-      sessionManager: {
-        getSessionFile: () => "/tmp/pi-session-tools.jsonl",
-      },
-    } as unknown as ExtensionContext;
-
-    // Act
-    const sessionStart = getHandler(mockPi.handlers, "session_start");
-    await sessionStart?.({ type: "session_start" }, ctx);
-
-    // Assert
-    const toolNames = mockPi.tools.map((t) => t.name);
-    expect(toolNames).toHaveLength(2);
-    expect(toolNames).toContain("memory_commit");
-    expect(toolNames).toContain("memory_branch");
-  } finally {
-    cleanup();
-  }
-});
-
-it("should register zero tools on session_start when .memory/ does not exist", async () => {
-  // Arrange
-  const mockPi = createMockPi();
-  activate(mockPi.api);
-
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "memory-no-init-"));
-  try {
-    const ui = createMockUi();
-    const ctx = {
-      cwd: tmpDir,
-      ui,
-      sessionManager: { getSessionFile: () => "/tmp/no-brain.jsonl" },
-    } as unknown as ExtensionContext;
-
-    // Act
-    const sessionStart = getHandler(mockPi.handlers, "session_start");
-    await sessionStart?.({ type: "session_start" }, ctx);
-
-    // Assert
-    expect(mockPi.tools).toHaveLength(0);
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-it("should not register tools twice on repeated session_start", async () => {
-  // Arrange
-  const { projectDir, cleanup } = setupInitializedProject();
-  try {
-    const mockPi = createMockPi();
-    activate(mockPi.api);
-
-    const ui = createMockUi();
-    const ctx = {
-      cwd: projectDir,
-      ui,
-      sessionManager: {
-        getSessionFile: () => "/tmp/pi-session-double.jsonl",
-      },
-    } as unknown as ExtensionContext;
-
-    const sessionStart = getHandler(mockPi.handlers, "session_start");
-
-    // Act
-    await sessionStart?.({ type: "session_start" }, ctx);
-    await sessionStart?.({ type: "session_start" }, ctx);
-
-    // Assert
-    expect(mockPi.tools).toHaveLength(2);
-  } finally {
-    cleanup();
-  }
-});
-```
+Update all existing test calls to pass `tmpDir` as the 4th argument.
 
 **Step 2: Run tests to verify they fail**
 
-Run: `pnpm run test -- src/index.test.ts`
-Expected: FAIL — old wiring test expects 5 tools and `resources_discover`
+Run: `pnpm run test -- src/memory-branch.test.ts`
+Expected: FAIL — function signature doesn't accept `projectDir`
 
-**Step 3: Rewrite `src/index.ts`**
+**Step 3: Update `executeMemoryBranch` and helpers**
 
-Key changes:
+Add `projectDir` parameter. Import `buildStatusView` from `./memory-context.js`. On success paths, append `\n\n${buildStatusView(state, branches, projectDir)}`. On error paths (validation failures, not found), return the error string as-is.
 
-1. Remove all 5 `pi.registerTool()` calls from the top-level `activate` scope.
-2. Keep `resources_discover` handler (skill stays globally discoverable).
-3. Remove imports for `executeMemoryStatus`, `executeMemorySwitch`, `executeMemoryMerge`, `executeMemoryBranch`.
-4. Add import for `executeMemoryBranchUnified`.
-5. In `session_start`, after `tryLoad` succeeds, call a `registerBrainTools(pi)` function that registers `memory_commit` and `memory_branch` (with a `toolsRegistered` guard to prevent double registration).
-6. The `memory_branch` tool uses a `String` type for the `action` param with all other params optional.
-7. Both tools pass `ctx.cwd` to their respective functions for status view generation.
+Determine success vs error: each helper returns a string. Add a simple convention — helpers return `{ text: string; ok: boolean }`, and the dispatcher appends status only when `ok` is true. Or simpler: the dispatcher calls `buildStatusView` after the helper, and each error-path helper sets a flag. Simplest approach: use an `isError` prefix check or return a tuple. **Recommended:** change helpers to return `{ text: string; ok: boolean }`.
 
-Full replacement for `src/index.ts`:
+**Step 4: Write failing test for `memory-commit.ts`**
+
+Add to `src/memory-commit.test.ts` in the `finalizeMemoryCommit` describe block:
 
 ```typescript
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
-
-import type {
-  AgentToolResult,
-  ExtensionAPI,
-  ExtensionContext,
-  SessionBeforeCompactEvent,
-} from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
-
-import { BranchManager } from "./branches.js";
-import { LOG_SIZE_WARNING_BYTES } from "./constants.js";
-import { executeMemoryBranchUnified } from "./memory-branch-unified.js";
-import { executeMemoryCommit, finalizeMemoryCommit } from "./memory-commit.js";
-import { formatOtaEntry } from "./ota-formatter.js";
-import { extractOtaInput } from "./ota-logger.js";
-import { MemoryState } from "./state.js";
-import { extractCommitBlocks, spawnCommitter } from "./subagent.js";
-
-const MEMORY_NOT_INITIALIZED_MESSAGE =
-  "Brain not initialized. Run brain-init.sh first, then /reload.";
-
-function createTextResult(text: string): AgentToolResult<unknown> {
-  return {
-    content: [{ type: "text", text }],
-    details: {},
-  };
-}
-
-function isMemoryReady(
-  state: MemoryState | null,
-  branchManager: BranchManager | null
-): state is MemoryState {
-  return state !== null && branchManager !== null && state.isInitialized;
-}
-
-function upsertCurrentSession(state: MemoryState, ctx: ExtensionContext): void {
-  const sessionFile = ctx.sessionManager.getSessionFile();
-  if (!sessionFile) {
-    return;
-  }
-
-  state.upsertSession(
-    sessionFile,
-    state.activeBranch,
-    new Date().toISOString()
+it("should include status view in the result", () => {
+  fs.writeFileSync(
+    path.join(tmpDir, ".memory/main.md"),
+    "# Roadmap\n\nGoals here.\n"
   );
-  state.save();
-}
+  const commitContent =
+    "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nFirst milestone.\n";
 
-function buildCompactionReminder(
-  state: MemoryState,
-  branchManager: BranchManager
-): string {
-  const branch = state.activeBranch;
-  const turns = branchManager.getLogTurnCount(branch);
-  const summary = state.lastCommit?.summary ?? "No commits yet";
+  const message = finalizeMemoryCommit(
+    "First milestone",
+    commitContent,
+    state,
+    branches,
+    tmpDir
+  );
 
-  return [
-    `Brain memory active on branch "${branch}".`,
-    `${turns} uncommitted turn${turns === 1 ? "" : "s"} in .memory/branches/${branch}/log.md.`,
-    `Latest commit summary: ${summary}.`,
-  ].join(" ");
-}
-
-function appendCompactionReminder(
-  event: SessionBeforeCompactEvent,
-  reminder: string
-): void {
-  event.customInstructions = event.customInstructions
-    ? `${event.customInstructions}\n\n${reminder}`
-    : reminder;
-}
-
-function resolveSkillPath(): string {
-  const currentFile = fileURLToPath(import.meta.url);
-  const currentDir = path.dirname(currentFile);
-  return path.resolve(currentDir, "../skills/brain");
-}
-
-export default function activate(pi: ExtensionAPI) {
-  let state: MemoryState | null = null;
-  let branchManager: BranchManager | null = null;
-  let toolsRegistered = false;
-
-  function tryLoad(ctx: ExtensionContext): boolean {
-    if (isMemoryReady(state, branchManager)) {
-      return true;
-    }
-
-    const candidate = new MemoryState(ctx.cwd);
-    candidate.load();
-
-    if (!candidate.isInitialized) {
-      return false;
-    }
-
-    state = candidate;
-    branchManager = new BranchManager(ctx.cwd);
-    upsertCurrentSession(state, ctx);
-    return true;
-  }
-
-  function registerBrainTools(): void {
-    if (toolsRegistered) {
-      return;
-    }
-    toolsRegistered = true;
-
-    pi.registerTool({
-      name: "memory_commit",
-      label: "Memory Commit",
-      description: "Checkpoint a milestone in agent memory.",
-      parameters: Type.Object({
-        summary: Type.String({
-          description: "Short summary of this checkpoint",
-        }),
-        update_roadmap: Type.Optional(Type.Boolean()),
-      }),
-      async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-        if (
-          !tryLoad(ctx) ||
-          !isMemoryReady(state, branchManager) ||
-          !branchManager
-        ) {
-          return createTextResult(MEMORY_NOT_INITIALIZED_MESSAGE);
-        }
-
-        const { task } = executeMemoryCommit(params, state, branchManager);
-
-        const result = await spawnCommitter(ctx.cwd, task, signal);
-
-        if (result.exitCode !== 0 || result.error) {
-          return createTextResult(
-            `Commit failed: ${result.error ?? "subagent exited with non-zero code"}`
-          );
-        }
-
-        const commitContent = extractCommitBlocks(result.text);
-        if (!commitContent) {
-          return createTextResult(
-            "Commit failed: could not extract commit blocks from subagent response."
-          );
-        }
-
-        const message = finalizeMemoryCommit(
-          params.summary,
-          commitContent,
-          state,
-          branchManager,
-          ctx.cwd
-        );
-
-        return createTextResult(message);
-      },
-    });
-
-    pi.registerTool({
-      name: "memory_branch",
-      label: "Memory Branch",
-      description:
-        "Manage memory branches. Actions: create (new branch), switch (change active branch), merge (synthesize branch into current).",
-      parameters: Type.Object({
-        action: Type.String({
-          description: 'Action to perform: "create", "switch", or "merge"',
-        }),
-        name: Type.Optional(
-          Type.String({
-            description: "Branch name (required for create)",
-          })
-        ),
-        purpose: Type.Optional(
-          Type.String({
-            description: "Why this branch exists (required for create)",
-          })
-        ),
-        branch: Type.Optional(
-          Type.String({
-            description: "Target branch name (required for switch and merge)",
-          })
-        ),
-        synthesis: Type.Optional(
-          Type.String({
-            description:
-              "Synthesized insight from source branch (required for merge)",
-          })
-        ),
-      }),
-      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-        if (
-          !tryLoad(ctx) ||
-          !isMemoryReady(state, branchManager) ||
-          !branchManager
-        ) {
-          return createTextResult(MEMORY_NOT_INITIALIZED_MESSAGE);
-        }
-
-        const previousBranch = state.activeBranch;
-        const result = executeMemoryBranchUnified(
-          params,
-          state,
-          branchManager,
-          ctx.cwd
-        );
-
-        if (state.activeBranch !== previousBranch) {
-          upsertCurrentSession(state, ctx);
-        }
-
-        return createTextResult(result);
-      },
-    });
-  }
-
-  pi.on("session_start", (_event, ctx) => {
-    state = new MemoryState(ctx.cwd);
-    state.load();
-    branchManager = new BranchManager(ctx.cwd);
-
-    if (!state.isInitialized) {
-      return;
-    }
-
-    registerBrainTools();
-    upsertCurrentSession(state, ctx);
-
-    const turnCount = branchManager.getLogTurnCount(state.activeBranch);
-    const logSizeBytes = branchManager.getLogSizeBytes(state.activeBranch);
-
-    if (logSizeBytes >= LOG_SIZE_WARNING_BYTES) {
-      const sizeKB = Math.round(logSizeBytes / 1024);
-      ctx.ui.notify(
-        `Brain: log.md is large (${sizeKB} KB). You should commit to distill this into structured memory.`,
-        "warning"
-      );
-    }
-
-    const branch = state.activeBranch;
-    const turnLabel = `${turnCount} uncommitted turn${turnCount === 1 ? "" : "s"}`;
-    ctx.ui.setStatus("brain", `Brain: ${branch} (${turnLabel})`);
-  });
-
-  pi.on("turn_end", (event) => {
-    if (!isMemoryReady(state, branchManager) || !branchManager) {
-      return;
-    }
-
-    const input = extractOtaInput(event);
-    if (!input) {
-      return;
-    }
-
-    const entry = formatOtaEntry(input);
-    branchManager.appendLog(state.activeBranch, entry);
-  });
-
-  pi.on("session_before_compact", (event) => {
-    if (!isMemoryReady(state, branchManager) || !branchManager) {
-      return;
-    }
-
-    const reminder = buildCompactionReminder(state, branchManager);
-    appendCompactionReminder(event, reminder);
-  });
-
-  pi.on("resources_discover", () => ({
-    skillPaths: [resolveSkillPath()],
-  }));
-}
+  expect(message).toContain("Commit ");
+  expect(message).toContain("# Memory Status");
+  expect(message).toContain("Active branch: main");
+});
 ```
 
-**Step 4: Update remaining `index.test.ts` tests**
+Update all existing `finalizeMemoryCommit` calls to pass `tmpDir` as 5th arg.
 
-Several existing tests reference `memory_status`, `memory_switch`, and `memory_merge` tools by name. Update:
+**Step 5: Update `finalizeMemoryCommit` in `src/memory-commit.ts`**
 
-- Remove the "uninitialized" test that calls `memory_status` — replace with a test that verifies no tools exist when uninitialized.
-- Update the "branch sync" test to use `memory_branch` with `{ action: "create", name: "feature-x", purpose: "..." }`.
-- Keep the `resources_discover` test (skill stays globally discoverable).
-- Update the "lazy load" test to verify tools appear after mid-session init + re-calling session_start (simulating `/reload`).
+Add `projectDir: string` parameter. Import `buildStatusView`. Append status to the result string.
 
-**Step 5: Run tests**
+**Step 6: Update call site in `src/index.ts`**
 
-Run: `pnpm run test -- src/index.test.ts`
+Pass `ctx.cwd` as the 5th argument to `finalizeMemoryCommit`.
+
+**Step 7: Run tests**
+
+Run: `pnpm run test -- src/memory-branch.test.ts src/memory-commit.test.ts`
 Expected: All tests PASS
-
-**Step 6: Commit**
-
-```bash
-git add src/index.ts src/index.test.ts
-git commit -m "feat: conditional tool registration, consolidate to 2 tools"
-```
-
----
-
-## Phase 3: Documentation and Cleanup
-
-### Task 5: Update templates and documentation
-
-**TDD scenario:** Trivial change — documentation only, no logic.
-
-**Files:**
-
-- Modify: `skills/brain/templates/root-agents-section.md` — update tool list
-- Modify: `skills/brain/templates/agents-md.md` — update tool table
-- Modify: `skills/brain/SKILL.md` — update orientation instructions (no `memory_status` tool)
-- Modify: `agents/memory-committer.md` — no changes expected (verify)
-- Modify: `src/init-script.test.ts` — update assertions for new tool names
-
-**Step 1: Update `root-agents-section.md`**
-
-```markdown
-## Brain — Agent Memory
-
-This project uses Brain for agent memory management.
-
-**Start here when orienting:** Read `.memory/main.md` for the project roadmap, key decisions, and open problems.
-Read `.memory/AGENTS.md` for the full Brain protocol reference.
-Tools: memory_commit, memory_branch (create/switch/merge)
-```
-
-**Step 2: Update `agents-md.md`**
-
-Update the tool table:
-
-```markdown
-## Tools
-
-| Tool            | Purpose                                  |
-| --------------- | ---------------------------------------- |
-| `memory_commit` | Checkpoint a milestone in understanding  |
-| `memory_branch` | Create, switch, or merge memory branches |
-
-Branch actions:
-
-- `create` — start a new branch for exploration
-- `switch` — change the active memory branch
-- `merge` — synthesize a branch's conclusions into the current branch
-```
-
-**Step 3: Update `SKILL.md`**
-
-Remove references to `memory_status` tool. Update the orientation section:
-
-Replace the "Context Retrieval" section. Instead of telling agents to call `memory_status`, instruct them to:
-
-```markdown
-## Context Retrieval
-
-At the start of a new session on an existing project, orient yourself by reading:
-
-- `read .memory/main.md` — project roadmap
-- `read .memory/branches/<branch>/commits.md` — full branch history
-
-For the OTA trace since last commit:
-
-- `read .memory/branches/<branch>/log.md`
-
-Both `memory_commit` and `memory_branch` include a status overview in their results, so you always have current state after mutations.
-```
-
-**Step 4: Update init-script test assertions**
-
-In `src/init-script.test.ts`, update the test that checks AGENTS.md content:
-
-```typescript
-// Old:
-expect(agents).toContain(
-  "Tools: memory_commit, memory_branch, memory_merge, memory_switch, memory_status"
-);
-// New:
-expect(agents).toContain("Tools: memory_commit, memory_branch");
-```
-
-Update the test that checks `.memory/AGENTS.md` content:
-
-```typescript
-// Old assertions for memory_status, memory_merge, memory_switch individually
-// New:
-expect(memoryAgents).toContain("memory_commit");
-expect(memoryAgents).toContain("memory_branch");
-// Remove individual assertions for memory_status, memory_merge, memory_switch
-```
-
-**Step 5: Run tests**
-
-Run: `pnpm run test -- src/init-script.test.ts`
-Expected: All tests PASS
-
-**Step 6: Commit**
-
-```bash
-git add skills/ agents/ src/init-script.test.ts
-git commit -m "docs: update templates and skill for 2-tool surface"
-```
-
----
-
-### Task 6: Remove old tool modules and update types
-
-**TDD scenario:** Trivial change — deleting code, no new logic.
-
-**Files:**
-
-- Delete: `src/memory-branch.ts`
-- Delete: `src/memory-branch.test.ts`
-- Delete: `src/memory-switch.ts`
-- Delete: `src/memory-switch.test.ts`
-- Delete: `src/memory-merge.ts`
-- Delete: `src/memory-merge.test.ts`
-- Modify: `src/types.ts` — remove `MemoryStatusParams` (no longer needed)
-- Modify: `src/memory-context.ts` — remove `executeMemoryStatus` function (no callers), remove `MemoryStatusParams` import
-
-**Step 1: Verify no imports reference the old modules**
-
-Run:
-
-```bash
-rg "memory-branch\.js|memory-switch\.js|memory-merge\.js" src/ --glob '!*.test.ts' --glob '!memory-branch.ts' --glob '!memory-switch.ts' --glob '!memory-merge.ts'
-```
-
-Expected: No matches (index.ts was already updated in Task 4).
-
-Run:
-
-```bash
-rg "executeMemoryStatus|MemoryStatusParams" src/ --glob '!*.test.ts' --glob '!memory-context.ts' --glob '!types.ts'
-```
-
-Expected: No matches.
-
-**Step 2: Delete the old files**
-
-```bash
-rm src/memory-branch.ts src/memory-branch.test.ts
-rm src/memory-switch.ts src/memory-switch.test.ts
-rm src/memory-merge.ts src/memory-merge.test.ts
-```
-
-**Step 3: Clean up `types.ts`**
-
-Remove `MemoryStatusParams` interface from `src/types.ts`.
-
-**Step 4: Clean up `memory-context.ts`**
-
-Remove the `executeMemoryStatus` function and the `MemoryStatusParams` import. Keep `buildStatusView` as the sole export.
-
-**Step 5: Update `memory-context.test.ts`**
-
-Remove all tests for `executeMemoryStatus`. Keep or convert tests to call `buildStatusView` directly (since it's now the export being tested). Update imports.
-
-**Step 6: Run full test suite**
-
-Run: `pnpm run test`
-Expected: All tests PASS
-
-**Step 7: Run full checks**
-
-Run: `pnpm run check`
-Expected: All checks pass (lint, typecheck, format, tests, deadcode, duplicates)
 
 **Step 8: Commit**
 
 ```bash
-git add -A
-git commit -m "refactor: remove old tool modules, clean up types and exports"
+git add src/memory-branch.ts src/memory-branch.test.ts src/memory-commit.ts src/memory-commit.test.ts src/index.ts
+git commit -m "feat: append status view to memory_branch and memory_commit results"
 ```
 
 ---
 
-## Phase 4: Final Verification
+### Task 4: Inject status via `before_agent_start` hook on first invocation
 
-### Task 7: End-to-end verification
+**TDD scenario:** New feature.
 
-**TDD scenario:** Manual verification
+**Files:**
 
-**Step 1: Run full check suite**
+- Modify: `src/index.ts` — add `before_agent_start` handler, remove `memory_status` tool
+- Modify: `src/index.test.ts` — add test for hook injection, remove `memory_status` tests
+
+**Design note:** `before_agent_start` fires on every user prompt, not just the first. A `statusInjected` flag gates injection to the first call only. The flag is reset in `session_start` (covers session switches and `/reload`) and `session_compact` (covers context compaction, where the agent loses the injected message and needs it re-injected).
+
+**Step 1: Write failing tests**
+
+Add to `src/index.test.ts`:
+
+```typescript
+it("should inject status message on first before_agent_start", async () => {
+  const { projectDir, cleanup } = setupInitializedProject();
+  try {
+    const mockPi = createMockPi();
+    activate(mockPi.api);
+
+    // Trigger session_start to load state
+    const ctx = createCtx(projectDir);
+    const sessionStart = getHandler(mockPi.handlers, "session_start");
+    await sessionStart?.({ type: "session_start" }, ctx);
+
+    // Trigger before_agent_start
+    const beforeStart = getHandler(mockPi.handlers, "before_agent_start");
+    const result = await beforeStart?.(
+      { type: "before_agent_start", prompt: "hello", systemPrompt: "..." },
+      ctx
+    );
+
+    expect(result).toBeDefined();
+    expect(result?.message?.content).toContain("# Memory Status");
+    expect(result?.message?.content).toContain("Active branch:");
+  } finally {
+    cleanup();
+  }
+});
+
+it("should NOT inject status on subsequent before_agent_start calls", async () => {
+  const { projectDir, cleanup } = setupInitializedProject();
+  try {
+    const mockPi = createMockPi();
+    activate(mockPi.api);
+
+    const ctx = createCtx(projectDir);
+    const sessionStart = getHandler(mockPi.handlers, "session_start");
+    await sessionStart?.({ type: "session_start" }, ctx);
+
+    const beforeStart = getHandler(mockPi.handlers, "before_agent_start");
+    const event = {
+      type: "before_agent_start",
+      prompt: "hello",
+      systemPrompt: "...",
+    };
+
+    // First call injects
+    await beforeStart?.(event, ctx);
+    // Second call should not inject
+    const result2 = await beforeStart?.(event, ctx);
+
+    expect(result2).toBeUndefined();
+  } finally {
+    cleanup();
+  }
+});
+
+it("should re-inject status after session_start resets the flag", async () => {
+  const { projectDir, cleanup } = setupInitializedProject();
+  try {
+    const mockPi = createMockPi();
+    activate(mockPi.api);
+
+    const ctx = createCtx(projectDir);
+    const sessionStart = getHandler(mockPi.handlers, "session_start");
+    const beforeStart = getHandler(mockPi.handlers, "before_agent_start");
+    const event = {
+      type: "before_agent_start",
+      prompt: "hello",
+      systemPrompt: "...",
+    };
+
+    // First session: inject status
+    await sessionStart?.({ type: "session_start" }, ctx);
+    await beforeStart?.(event, ctx);
+
+    // Second call should not inject
+    const result2 = await beforeStart?.(event, ctx);
+    expect(result2).toBeUndefined();
+
+    // session_start fires again (session switch / reload) — resets the flag
+    await sessionStart?.({ type: "session_start" }, ctx);
+
+    // Now it should inject again
+    const result3 = await beforeStart?.(event, ctx);
+    expect(result3).toBeDefined();
+    expect(result3?.message?.content).toContain("# Memory Status");
+  } finally {
+    cleanup();
+  }
+});
+
+it("should re-inject status after session_compact resets the flag", async () => {
+  const { projectDir, cleanup } = setupInitializedProject();
+  try {
+    const mockPi = createMockPi();
+    activate(mockPi.api);
+
+    const ctx = createCtx(projectDir);
+    const sessionStart = getHandler(mockPi.handlers, "session_start");
+    const beforeStart = getHandler(mockPi.handlers, "before_agent_start");
+    const sessionCompact = getHandler(mockPi.handlers, "session_compact");
+    const event = {
+      type: "before_agent_start",
+      prompt: "hello",
+      systemPrompt: "...",
+    };
+
+    // Initial session + first injection
+    await sessionStart?.({ type: "session_start" }, ctx);
+    await beforeStart?.(event, ctx);
+
+    // Compaction resets the flag
+    await sessionCompact?.({ type: "session_compact" }, ctx);
+
+    // Should inject again
+    const result = await beforeStart?.(event, ctx);
+    expect(result).toBeDefined();
+    expect(result?.message?.content).toContain("# Memory Status");
+  } finally {
+    cleanup();
+  }
+});
+```
+
+Also update the wiring test that checks registered tool names — remove `memory_status` from expected list.
+
+**Step 2: Run tests to verify they fail**
+
+Run: `pnpm run test -- src/index.test.ts`
+Expected: FAIL — no `before_agent_start` handler, `memory_status` still registered
+
+**Step 3: Update `src/index.ts`**
+
+1. Remove the `memory_status` tool registration block entirely.
+2. Remove the `executeMemoryStatus` import.
+3. Add import for `buildStatusView` from `./memory-context.js`.
+4. Add a `statusInjected` boolean flag (starts `false`, set to `true` after first injection).
+5. Reset `statusInjected = false` at the top of the `session_start` handler (before `tryLoad`).
+6. Add a `session_compact` handler that resets `statusInjected = false`.
+7. Add a `before_agent_start` handler:
+
+```typescript
+pi.on("before_agent_start", (_event, ctx) => {
+  if (statusInjected) {
+    return;
+  }
+
+  if (!isMemoryReady(state, branchManager) || !branchManager) {
+    return;
+  }
+
+  statusInjected = true;
+
+  const status = buildStatusView(state, branchManager, ctx.cwd);
+  return {
+    message: {
+      customType: "brain-status",
+      content: status,
+      display: "tool",
+      details: {},
+    },
+  };
+});
+
+pi.on("session_compact", () => {
+  statusInjected = false;
+});
+```
+
+8. Update the `memory_branch` tool registration to use the consolidated `executeMemoryBranch` with action parameter:
+
+```typescript
+pi.registerTool({
+  name: "memory_branch",
+  label: "Memory Branch",
+  description:
+    "Manage memory branches. Actions: create (new branch), switch (change active branch), merge (synthesize branch into current).",
+  parameters: Type.Object({
+    action: Type.String({
+      description: 'Action to perform: "create", "switch", or "merge"',
+    }),
+    name: Type.Optional(
+      Type.String({ description: "Branch name (required for create)" })
+    ),
+    purpose: Type.Optional(
+      Type.String({
+        description: "Why this branch exists (required for create)",
+      })
+    ),
+    branch: Type.Optional(
+      Type.String({
+        description: "Target branch (required for switch and merge)",
+      })
+    ),
+    synthesis: Type.Optional(
+      Type.String({ description: "Synthesized insight (required for merge)" })
+    ),
+  }),
+  async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    if (
+      !tryLoad(ctx) ||
+      !isMemoryReady(state, branchManager) ||
+      !branchManager
+    ) {
+      return createTextResult(MEMORY_NOT_INITIALIZED_MESSAGE);
+    }
+
+    const previousBranch = state.activeBranch;
+    const result = executeMemoryBranch(params, state, branchManager, ctx.cwd);
+
+    if (state.activeBranch !== previousBranch) {
+      upsertCurrentSession(state, ctx);
+    }
+
+    return createTextResult(result);
+  },
+});
+```
+
+9. Remove `memory_switch` and `memory_merge` tool registration blocks.
+10. Remove imports for `executeMemorySwitch` and `executeMemoryMerge`.
+
+**Step 4: Run tests**
+
+Run: `pnpm run test -- src/index.test.ts`
+Expected: All tests PASS
+
+**Step 5: Commit**
+
+```bash
+git add src/index.ts src/index.test.ts
+git commit -m "feat: inject status via before_agent_start hook, remove memory_status tool"
+```
+
+---
+
+## Phase 3: Cleanup
+
+### Task 5: Delete old modules
+
+**Files:**
+
+- Delete: `src/memory-switch.ts`, `src/memory-switch.test.ts`
+- Delete: `src/memory-merge.ts`, `src/memory-merge.test.ts`
+- Modify: `src/types.ts` — remove `MemoryStatusParams`
+
+**Step 1: Verify no imports reference old modules**
+
+```bash
+rg "memory-switch\.js|memory-merge\.js|executeMemoryStatus|MemoryStatusParams" src/
+```
+
+Expected: No matches (all call sites updated in prior tasks).
+
+**Step 2: Delete files and clean up types**
+
+```bash
+rm src/memory-switch.ts src/memory-switch.test.ts
+rm src/memory-merge.ts src/memory-merge.test.ts
+```
+
+Remove `MemoryStatusParams` from `src/types.ts`.
+
+**Step 3: Run full checks**
 
 Run: `pnpm run check`
 Expected: All green
 
-**Step 2: Verify non-Brain project has zero footprint**
+**Step 4: Commit**
 
 ```bash
-cd /tmp && mkdir test-no-brain && cd test-no-brain
-pi -e /home/will/projects/pi-brain/src/index.ts -p "list your available tools"
+git add -A
+git commit -m "refactor: remove old switch/merge/status modules and types"
 ```
 
-Expected: No `memory_*` tools in output. No Brain skill in available_skills.
+---
 
-**Step 3: Verify Brain project works end-to-end**
+### Task 6: Update documentation and templates
+
+**Files:**
+
+- Modify: `skills/brain/SKILL.md` — remove `memory_status` tool references, update orientation instructions
+- Modify: `skills/brain/templates/root-agents-section.md` — update tool list
+- Modify: `skills/brain/templates/agents-md.md` — update tool table
+- Modify: `src/init-script.test.ts` — update assertions for new tool names
+
+**Step 1: Update templates**
+
+In `root-agents-section.md`, change tool list to: `Tools: memory_commit, memory_branch (create/switch/merge)`
+
+In `agents-md.md`, replace individual tool entries with consolidated table showing `memory_commit` and `memory_branch` with its three actions.
+
+**Step 2: Update SKILL.md**
+
+Remove references to `memory_status` tool. Update context retrieval section to explain that status is automatically injected at session start and appended to `memory_branch` and `memory_commit` results. For manual deep retrieval, use `read` on `.memory/` files.
+
+**Step 3: Update init-script test assertions**
+
+Update expected tool names in assertions.
+
+**Step 4: Run full checks**
+
+Run: `pnpm run check`
+Expected: All green
+
+**Step 5: Commit**
 
 ```bash
-cd /tmp && mkdir test-brain && cd test-brain && git init
-pi -e /home/will/projects/pi-brain/src/index.ts
-# In session: run brain-init.sh, then /reload
-# Verify: memory_commit and memory_branch tools available
-# Verify: memory_branch with action "create" works
-# Verify: memory_commit includes status in result
-```
-
-**Step 4: Commit any fixups**
-
-```bash
-git add -A && git commit -m "chore: post-verification fixups" # if needed
+git add -A
+git commit -m "docs: update templates, skill, and init tests for 2-tool surface"
 ```
 
 ---
 
 ## Summary
 
-| Before                              | After                                      |
-| ----------------------------------- | ------------------------------------------ |
-| 5 tools always registered           | 2 tools, conditionally registered          |
-| `memory_status` tool                | Status via tool results + `read`           |
-| Skill via `resources_discover`      | Skill via `resources_discover` (unchanged) |
-| Tools present in non-Brain projects | Zero tool footprint in non-Brain projects  |
-| Mid-session init works silently     | Mid-session init requires `/reload`        |
-
-**Cache safety:** No system prompt modifications. No tool set changes mid-session. Status arrives as append-only tool results. Fully prefix-stable.
+| Before                                                                                      | After                                                                          |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 5 tools: `memory_status`, `memory_branch`, `memory_switch`, `memory_merge`, `memory_commit` | 2 tools: `memory_branch` (with create/switch/merge actions), `memory_commit`   |
+| Status requires explicit tool call                                                          | Status injected automatically via `before_agent_start` on first invocation     |
+| No status in tool results                                                                   | Status appended to every successful `memory_branch` and `memory_commit` result |
+| 3 separate modules for branch ops                                                           | 1 module: `memory-branch.ts`                                                   |
