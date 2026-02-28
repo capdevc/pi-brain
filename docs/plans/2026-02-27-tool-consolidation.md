@@ -2,9 +2,9 @@
 
 > **REQUIRED SUB-SKILL:** Use the executing-plans skill to implement this plan task-by-task.
 
-**Goal:** Reduce Brain's tool surface from 5 tools to 2, eliminate `memory_status` as a tool, make skill project-scoped, and ensure the extension has zero footprint in non-Brain projects — all without breaking prompt cache.
+**Goal:** Reduce Brain's tool surface from 5 tools to 2, eliminate `memory_status` as a tool, and conditionally register tools only in Brain-enabled projects — all without breaking prompt cache.
 
-**Architecture:** Consolidate `memory_branch`, `memory_switch`, `memory_merge` into a single `memory_branch` tool with an `action` parameter. Remove `memory_status` tool entirely — status is appended to mutation tool results and orientation happens via `read` tool. Register tools conditionally at `session_start` only when `.memory/` exists. Move skill discovery from `resources_discover` hook to project-local `.pi/agent/skills/` created at init time.
+**Architecture:** Consolidate `memory_branch`, `memory_switch`, `memory_merge` into a single `memory_branch` tool with an `action` parameter. Remove `memory_status` tool entirely — status is appended to mutation tool results and orientation happens via `read` tool. Register tools conditionally at `session_start` only when `.memory/` exists. Skill remains globally discoverable via `resources_discover` (lightweight — just a name and path in `<available_skills>`).
 
 **Tech Stack:** TypeScript (ESM), vitest, pi extension API
 
@@ -724,8 +724,7 @@ it("should not register tools during activate (deferred to session_start)", () =
   expect(handlerNames).toContain("turn_end");
   expect(handlerNames).toContain("session_start");
   expect(handlerNames).toContain("session_before_compact");
-  // resources_discover removed — skill is now project-scoped
-  expect(handlerNames).not.toContain("resources_discover");
+  expect(handlerNames).toContain("resources_discover");
 });
 ```
 
@@ -827,16 +826,19 @@ Expected: FAIL — old wiring test expects 5 tools and `resources_discover`
 Key changes:
 
 1. Remove all 5 `pi.registerTool()` calls from the top-level `activate` scope.
-2. Remove `resources_discover` handler.
+2. Keep `resources_discover` handler (skill stays globally discoverable).
 3. Remove imports for `executeMemoryStatus`, `executeMemorySwitch`, `executeMemoryMerge`, `executeMemoryBranch`.
 4. Add import for `executeMemoryBranchUnified`.
 5. In `session_start`, after `tryLoad` succeeds, call a `registerBrainTools(pi)` function that registers `memory_commit` and `memory_branch` (with a `toolsRegistered` guard to prevent double registration).
-6. The `memory_branch` tool uses `StringEnum(["create", "switch", "merge"])` for the `action` param with all other params optional.
+6. The `memory_branch` tool uses a `String` type for the `action` param with all other params optional.
 7. Both tools pass `ctx.cwd` to their respective functions for status view generation.
 
 Full replacement for `src/index.ts`:
 
 ```typescript
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import type {
   AgentToolResult,
   ExtensionAPI,
@@ -907,6 +909,12 @@ function appendCompactionReminder(
   event.customInstructions = event.customInstructions
     ? `${event.customInstructions}\n\n${reminder}`
     : reminder;
+}
+
+function resolveSkillPath(): string {
+  const currentFile = fileURLToPath(import.meta.url);
+  const currentDir = path.dirname(currentFile);
+  return path.resolve(currentDir, "../skills/brain");
 }
 
 export default function activate(pi: ExtensionAPI) {
@@ -1093,6 +1101,10 @@ export default function activate(pi: ExtensionAPI) {
     const reminder = buildCompactionReminder(state, branchManager);
     appendCompactionReminder(event, reminder);
   });
+
+  pi.on("resources_discover", () => ({
+    skillPaths: [resolveSkillPath()],
+  }));
 }
 ```
 
@@ -1102,7 +1114,7 @@ Several existing tests reference `memory_status`, `memory_switch`, and `memory_m
 
 - Remove the "uninitialized" test that calls `memory_status` — replace with a test that verifies no tools exist when uninitialized.
 - Update the "branch sync" test to use `memory_branch` with `{ action: "create", name: "feature-x", purpose: "..." }`.
-- Remove the `resources_discover` test entirely.
+- Keep the `resources_discover` test (skill stays globally discoverable).
 - Update the "lazy load" test to verify tools appear after mid-session init + re-calling session_start (simulating `/reload`).
 
 **Step 5: Run tests**
@@ -1114,98 +1126,14 @@ Expected: All tests PASS
 
 ```bash
 git add src/index.ts src/index.test.ts
-git commit -m "feat: conditional tool registration, consolidate to 2 tools, remove resources_discover"
+git commit -m "feat: conditional tool registration, consolidate to 2 tools"
 ```
 
 ---
 
-## Phase 3: Project-Scoped Skill and Init Script Updates
+## Phase 3: Documentation and Cleanup
 
-### Task 5: Update `brain-init.sh` to copy skill into project
-
-**TDD scenario:** Modifying tested code — `init-script.test.ts` covers the init script.
-
-**Files:**
-
-- Modify: `skills/brain/scripts/brain-init.sh`
-- Modify: `src/init-script.test.ts`
-
-**Step 1: Write the failing tests**
-
-Add to `src/init-script.test.ts`:
-
-```typescript
-it("should copy skill into .pi/agent/skills/brain/", () => {
-  // Act
-  execFileSync("bash", [scriptPath], { cwd: tmpDir });
-
-  // Assert
-  expect(
-    fs.existsSync(path.join(tmpDir, ".pi/agent/skills/brain/SKILL.md"))
-  ).toBeTruthy();
-  const skillContent = fs.readFileSync(
-    path.join(tmpDir, ".pi/agent/skills/brain/SKILL.md"),
-    "utf8"
-  );
-  expect(skillContent).toContain("Brain");
-});
-
-it("should print reload instruction after init", () => {
-  // Act
-  const output = execFileSync("bash", [scriptPath], {
-    cwd: tmpDir,
-    encoding: "utf8",
-  });
-
-  // Assert
-  expect(output).toContain("/reload");
-});
-```
-
-**Step 2: Run test to verify it fails**
-
-Run: `pnpm run test -- src/init-script.test.ts`
-Expected: FAIL — `.pi/agent/skills/brain/SKILL.md` does not exist
-
-**Step 3: Update `brain-init.sh`**
-
-Add to `brain-init.sh`, after the gitignore section:
-
-```bash
-# --- Copy skill into project-local .pi/agent/skills/ ---
-
-SKILL_SOURCE_DIR="$SCRIPT_DIR/.."
-PROJECT_SKILL_DIR=".pi/agent/skills/brain"
-
-if [ ! -d "$PROJECT_SKILL_DIR" ]; then
-  mkdir -p "$PROJECT_SKILL_DIR"
-fi
-
-# Always overwrite SKILL.md (like AGENTS.md, it's a reference doc)
-cp "$SKILL_SOURCE_DIR/SKILL.md" "$PROJECT_SKILL_DIR/SKILL.md"
-
-echo ""
-echo "Brain memory initialized successfully."
-echo "Run /reload to activate Brain tools."
-```
-
-Also update the existing success message at the end (remove the old `echo` line that just says "Brain memory initialized successfully.").
-
-**Step 4: Run tests**
-
-Run: `pnpm run test -- src/init-script.test.ts`
-Expected: All tests PASS
-
-**Step 5: Commit**
-
-```bash
-git add skills/brain/scripts/brain-init.sh src/init-script.test.ts
-git commit -m "feat: brain-init copies skill to project, prints /reload instruction"
-```
-
----
-
-### Task 6: Update templates and documentation
+### Task 5: Update templates and documentation
 
 **TDD scenario:** Trivial change — documentation only, no logic.
 
@@ -1306,9 +1234,7 @@ git commit -m "docs: update templates and skill for 2-tool surface"
 
 ---
 
-## Phase 4: Cleanup
-
-### Task 7: Remove old tool modules and update types
+### Task 6: Remove old tool modules and update types
 
 **TDD scenario:** Trivial change — deleting code, no new logic.
 
@@ -1380,9 +1306,9 @@ git commit -m "refactor: remove old tool modules, clean up types and exports"
 
 ---
 
-## Phase 5: Final Verification
+## Phase 4: Final Verification
 
-### Task 8: End-to-end verification
+### Task 7: End-to-end verification
 
 **TDD scenario:** Manual verification
 
@@ -1421,12 +1347,12 @@ git add -A && git commit -m "chore: post-verification fixups" # if needed
 
 ## Summary
 
-| Before                              | After                                       |
-| ----------------------------------- | ------------------------------------------- |
-| 5 tools always registered           | 2 tools, only in Brain projects             |
-| `memory_status` tool                | Status via tool results + `read`            |
-| `resources_discover` hook for skill | Skill copied to `.pi/agent/skills/` at init |
-| Brain visible in all projects       | Zero footprint in non-Brain projects        |
-| Mid-session init works silently     | Mid-session init requires `/reload`         |
+| Before                              | After                                      |
+| ----------------------------------- | ------------------------------------------ |
+| 5 tools always registered           | 2 tools, conditionally registered          |
+| `memory_status` tool                | Status via tool results + `read`           |
+| Skill via `resources_discover`      | Skill via `resources_discover` (unchanged) |
+| Tools present in non-Brain projects | Zero tool footprint in non-Brain projects  |
+| Mid-session init works silently     | Mid-session init requires `/reload`        |
 
 **Cache safety:** No system prompt modifications. No tool set changes mid-session. Status arrives as append-only tool results. Fully prefix-stable.
