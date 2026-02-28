@@ -119,7 +119,7 @@ describe("brain-init.sh", () => {
     expect(matches?.length).toBe(1);
   });
 
-  it("should write .memory/AGENTS.md with protocol reference", () => {
+  it("should write .memory/AGENTS.md with protocol reference and commit checklist", () => {
     // Act
     execFileSync("bash", [scriptPath], { cwd: tmpDir });
 
@@ -133,5 +133,7 @@ describe("brain-init.sh", () => {
     expect(memoryAgents).toContain("create");
     expect(memoryAgents).toContain("switch");
     expect(memoryAgents).toContain("merge");
+    expect(memoryAgents).toContain("## When to Commit");
+    expect(memoryAgents).toContain("end the session");
   });
 });

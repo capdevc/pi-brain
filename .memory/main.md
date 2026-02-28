@@ -4,28 +4,31 @@
 
 pi-brain gives pi coding agents versioned memory via a `.memory/` directory. Agents commit decisions and rationale (not code diffs), branch for explorations, and merge conclusions — preserving reasoning across sessions, compactions, and model switches.
 
-## Current State (2026-02-27)
+## Current State (2026-02-28)
 
-**v0.1.0 published (as pi-gcc). Renamed to pi-brain.** Core tooling is feature-complete:
+**v0.1.4 published. Renamed from pi-gcc to pi-brain.** Core tooling is feature-complete:
 
-- 5 tools: `memory_status`, `memory_branch`, `memory_switch`, `memory_commit`, `memory_merge`
+- 2 tools: `memory_commit` (checkpoint), `memory_branch` (create/switch/merge)
 - Lifecycle hooks: `turn_end` (OTA logging), `session_start` (registration), `session_before_compact` (awareness note)
 - Subagent-based commit distillation (canonical spec flow, replaced earlier 2-step flow)
 - Cache-safe design: static root AGENTS.md, no per-turn injection, fixed tool definitions
 - Lazy state initialization — tools work immediately after mid-session `.memory/` creation
 - Log size warning at 600 KB — nudges agent to commit before subagent context overflow
-- 138 tests passing, all checks green
+- Roadmap update reminder — `memory_commit` result prompts agent to update `main.md`
+- 170 tests passing, all checks green
 
 ## Key Decisions Made
 
 - **Renamed from pi-gcc to pi-brain** — GCC collides with GNU Compiler Collection. Package = pi-brain (what it IS), tools = memory\_\* (what you DO), directory = .memory/ (where it LIVES).
 - **Subagent commit distillation over 2-step flow** — main agent may be near context limit; subagent reads log.md in fresh context.
+- **Consolidated from 5 tools to 2** — `memory_commit` and `memory_branch` (handles create/switch/merge). Status is injected via lifecycle hooks; no separate tool needed.
 - **Static root AGENTS.md** — written once at init, never updated. Preserves prompt cache stability.
 - **No `before_agent_start` injection** — agent retrieves context on demand via `memory_status` and `read`. Cache-safe by design.
 - **Track `.memory/` in git except `log.md`** — enables cross-agent collaboration; transient logs are working state.
 - **Lazy state initialization** — tools re-check for `.memory/` on each call if not yet loaded, so mid-session init just works.
 - **Log size threshold (600 KB)** — approximately 150-175k tokens. Extension warns in `session_start` and `memory_status` when log.md is large.
 - **Minimal YAML parser** — custom `src/yaml.ts` avoids external dependency for `state.yaml` and `metadata.yaml` operations.
+- **Roadmap update reminder after every commit** — `memory_commit` always appends an "Action required: update main.md" reminder (opt-out via `update_roadmap: false`). Protocol docs (SKILL.md, .memory/AGENTS.md) also instruct agents to keep main.md current.
 
 ## Milestones
 
@@ -42,6 +45,8 @@ pi-brain gives pi coding agents versioned memory via a `.memory/` directory. Age
 - [x] Lazy state initialization (mid-session init works without restart)
 - [x] Log size warning at 600 KB threshold (strategic forgetting nudge)
 - [x] Rename from pi-gcc to pi-brain (package, tools, directory, skill)
+- [x] Consolidate from 5 tools to 2 (memory_commit + memory_branch)
+- [x] Roadmap update reminder in commit flow and protocol docs
 
 ### Planned / Open
 

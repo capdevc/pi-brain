@@ -4,13 +4,18 @@ This directory contains your project's agent memory, managed by the Brain extens
 
 ## Tools
 
-| Tool            | Purpose                                 |
-| --------------- | --------------------------------------- |
-| `memory_commit` | Checkpoint a milestone in understanding |
-| `memory_branch` | Create a memory branch for exploration  |
-| `memory_merge`  | Synthesize branch conclusions           |
-| `memory_status` | Multi-resolution retrieval of memory    |
-| `memory_switch` | Switch active memory branch             |
+| Tool            | Purpose                                   |
+| --------------- | ----------------------------------------- |
+| `memory_commit` | Checkpoint a milestone in understanding   |
+| `memory_branch` | Manage branches: create, switch, or merge |
+
+### memory_branch Actions
+
+| Action   | Required Params       | Description                                 |
+| -------- | --------------------- | ------------------------------------------- |
+| `create` | `name`, `purpose`     | Create a new branch and switch to it        |
+| `switch` | `branch`              | Switch active memory branch                 |
+| `merge`  | `branch`, `synthesis` | Synthesize a branch's insights into current |
 
 ## File Structure
 
@@ -35,10 +40,22 @@ Each commit in `commits.md` has three blocks:
 
 The latest commit always contains a self-contained summary of the full branch history.
 
+## When to Commit
+
+Call `memory_commit` when one of these is true:
+
+- You reached a stable decision or understanding worth preserving.
+- You finished an exploration branch with a clear conclusion.
+- You are about to change direction significantly.
+- You completed meaningful progress and are about to end the session.
+- The extension warns that `log.md` is getting large.
+- You are about to claim the task is complete or hand off to another agent.
+
 ## Conventions
 
 - **Agent-driven**: You decide when to commit, branch, and merge
 - **Decisions over details**: Capture "why", not "what" — git tracks file changes
 - **Rolling summaries**: Each commit re-synthesizes all prior progress
 - **No direct log.md writes**: The extension maintains log.md automatically
-- **Call `memory_status` first**: Always review context before merging or starting new work
+- **Status is automatic**: Memory status is injected at session start and appended to tool results (compact/truncated when large; use `read .memory/main.md` for full roadmap)
+- **Keep main.md current**: After every commit, update `.memory/main.md` to reflect the new state — current state, decisions, and milestones. The roadmap is the first thing new sessions read; stale roadmaps cause wrong orientation. For trivial commits that don't change project state (e.g., minor refactors), pass `update_roadmap: false` to skip the reminder.

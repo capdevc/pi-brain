@@ -34,7 +34,8 @@ export function finalizeMemoryCommit(
   commitContent: string,
   state: MemoryState,
   branches: BranchManager,
-  projectDir: string
+  projectDir: string,
+  updateRoadmap?: boolean
 ): string {
   const branch = state.activeBranch;
   const hash = generateHash();
@@ -60,5 +61,11 @@ export function finalizeMemoryCommit(
   const status = buildStatusView(state, branches, projectDir, {
     compact: true,
   });
-  return `${resultText}\n\n${status}`;
+
+  const roadmapReminder =
+    updateRoadmap === false
+      ? ""
+      : "\n\n**Action required:** Update `.memory/main.md` to reflect this commit — current state, decisions, and milestones. The roadmap is the first thing new sessions read.";
+
+  return `${resultText}\n\n${status}${roadmapReminder}`;
 }

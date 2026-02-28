@@ -2,9 +2,9 @@ active_branch: main
 initialized: "2026-02-25T20:35:12Z"
 last_commit:
   branch: main
-  hash: e0a5a7a9
-  timestamp: "2026-02-28T17:32:00.379Z"
-  summary: "Routine maintenance: distilling accumulated OTA log activity into structured memory commits"
+  hash: a86ad81d
+  timestamp: "2026-02-28T20:02:17.138Z"
+  summary: "Improved Brain protocol docs to reduce missed commits: added explicit 'When to Commit' checklist to the AGENTS template used by brain-init, updated project .memory/AGENTS.md to current 2-tool model, and added init-script regression coverage for checklist presence."
 sessions:
   - file: "/home/will/.pi/agent/sessions/--home-will-projects-pi-gcc--/2026-02-25T20-34-45-614Z_282b30df-0407-4f3f-bba9-cf6cf15c1478.jsonl"
     branch: main
@@ -27,3 +27,18 @@ sessions:
   - file: "/home/will/.pi/agent/sessions/--home-will-projects-pi-brain--/2026-02-28T17-34-02-569Z_29525a4c-880a-44e8-8f3a-83c58af0a760.jsonl"
     branch: main
     started: "2026-02-28T17:34:02.569Z"
+  - file: "/home/will/.pi/agent/sessions/--home-will-projects-pi-brain--/2026-02-28T17-39-56-095Z_e2206226-2c88-4bc2-8f81-4a4750e7f29d.jsonl"
+    branch: main
+    started: "2026-02-28T17:39:56.112Z"
+  - file: "/home/will/.pi/agent/sessions/--home-will-projects-pi-brain--/2026-02-28T17-53-33-086Z_c577ee1a-46e1-47a2-b077-7e9bf65a8bd0.jsonl"
+    branch: main
+    started: "2026-02-28T17:53:33.102Z"
+  - file: "/home/will/.pi/agent/sessions/--home-will-projects-pi-brain--/2026-02-28T18-00-42-197Z_a4e1bf5a-b5ac-4262-a971-b94a86607d21.jsonl"
+    branch: main
+    started: "2026-02-28T18:00:42.214Z"
+  - file: "/home/will/.pi/agent/sessions/--home-will-projects-pi-brain--/2026-02-28T18-01-38-820Z_0c84b526-9d90-46ef-80fa-9a21c6bf1272.jsonl"
+    branch: main
+    started: "2026-02-28T18:01:38.838Z"
+  - file: "/home/will/.pi/agent/sessions/--home-will-projects-pi-brain--/2026-02-28T22-32-22-811Z_2e5fd5c7-5f40-4f86-b5ca-1811e65d423e.jsonl"
+    branch: main
+    started: "2026-02-28T22:32:22.825Z"

@@ -127,12 +127,10 @@ export default function activate(pi: ExtensionAPI) {
     description:
       "Manage memory branches. Actions: create (new branch), switch (change active branch), merge (synthesize branch into current).",
     parameters: Type.Object({
-      action: Type.Union(
-        [Type.Literal("create"), Type.Literal("switch"), Type.Literal("merge")],
-        {
-          description: 'Action to perform: "create", "switch", or "merge"',
-        }
-      ),
+      action: Type.String({
+        enum: ["create", "switch", "merge"],
+        description: 'Action to perform: "create", "switch", or "merge"',
+      }),
       name: Type.Optional(
         Type.String({ description: "Branch name (required for create)" })
       ),
@@ -180,7 +178,12 @@ export default function activate(pi: ExtensionAPI) {
     description: "Checkpoint a milestone in agent memory.",
     parameters: Type.Object({
       summary: Type.String({ description: "Short summary of this checkpoint" }),
-      update_roadmap: Type.Optional(Type.Boolean()),
+      update_roadmap: Type.Optional(
+        Type.Boolean({
+          description:
+            "Update .memory/main.md after commit. Defaults to true — set false to skip for trivial commits.",
+        })
+      ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       if (
@@ -214,7 +217,8 @@ export default function activate(pi: ExtensionAPI) {
         commitContent,
         state,
         branchManager,
-        ctx.cwd
+        ctx.cwd,
+        params.update_roadmap
       );
 
       setBrainFooterStatus(ctx, state, branchManager);

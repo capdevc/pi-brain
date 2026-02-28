@@ -63,3 +63,24 @@ Initial development focused on establishing the core `pi-gcc` (now `pi-brain`) e
 - Integrated property-based testing (PBT) for core logic (YAML, OTA formatting, status rendering) to ensure robustness against malformed inputs and edge cases.
 - Enforced deterministic branch sorting in memory status output to maintain stable tool results across different execution environments.
 - Expanded test coverage to 167 passing tests, specifically validating lifecycle hooks and cache-safety contracts.
+
+---
+
+## Commit a86ad81d | 2026-02-28T20:02:17.138Z
+
+### Branch Purpose
+
+Maintain the primary developmental roadmap and memory for the `pi-brain` extension, capturing core architectural decisions and evolution of the memory protocol.
+
+### Previous Progress Summary
+
+Initial development established the `pi-brain` extension (formerly `pi-gcc`) with lazy state initialization and a 600 KB log size threshold to prevent context overflow. Architectural milestones include migrating to the `memory_*` tool namespace, implementing autonomous subagent-based distillation, and enforcing prompt-cache safety invariants. The protocol was refined into a 2-tool model (`memory_commit`, `memory_branch`) with agent-driven initialization via the `brain` skill, supported by property-based testing and deterministic output sorting to ensure robustness across diverse execution environments.
+
+### This Commit's Contribution
+
+- Added an explicit "When to Commit" checklist to the `.memory/AGENTS.md` template and protocol reference to standardize checkpoint triggers.
+- Updated root `.memory/AGENTS.md` to the current 2-tool model, ensuring agent orientation matches the actual toolset.
+- Implemented regression test coverage in `src/init-script.test.ts` to ensure the commit checklist is present in generated memory directories.
+- Rejected "auto-commit on shutdown" as a strategy to avoid noisy/low-value memory entries, favoring proactive nudges instead.
+- Confirmed that UI-only footer status changes do not influence model context, reinforcing the necessity of explicit documentation-based guidance.
+- Triaged future UX improvements (session-shutdown reminders and milestone-based nudges) into project TODOs for deeper design.

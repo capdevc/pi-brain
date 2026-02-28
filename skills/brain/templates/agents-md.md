@@ -40,6 +40,17 @@ Each commit in `commits.md` has three blocks:
 
 The latest commit always contains a self-contained summary of the full branch history.
 
+## When to Commit
+
+Call `memory_commit` when one of these is true:
+
+- You reached a stable decision or understanding worth preserving.
+- You finished an exploration branch with a clear conclusion.
+- You are about to change direction significantly.
+- You completed meaningful progress and are about to end the session.
+- The extension warns that `log.md` is getting large.
+- You are about to claim the task is complete or hand off to another agent.
+
 ## Conventions
 
 - **Agent-driven**: You decide when to commit, branch, and merge
@@ -47,3 +58,4 @@ The latest commit always contains a self-contained summary of the full branch hi
 - **Rolling summaries**: Each commit re-synthesizes all prior progress
 - **No direct log.md writes**: The extension maintains log.md automatically
 - **Status is automatic**: Memory status is injected at session start and appended to tool results (compact/truncated when large; use `read .memory/main.md` for full roadmap)
+- **Keep main.md current**: After every commit, update `.memory/main.md` to reflect the new state — current state, decisions, and milestones. The roadmap is the first thing new sessions read; stale roadmaps cause wrong orientation. For trivial commits that don't change project state (e.g., minor refactors), pass `update_roadmap: false` to skip the reminder.

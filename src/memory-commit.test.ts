@@ -249,4 +249,35 @@ describe("finalizeMemoryCommit", () => {
     expect(message).toContain("Roadmap truncated");
     expect(message.length).toBeLessThan(5000);
   });
+
+  it("should include roadmap update reminder by default", () => {
+    const commitContent =
+      "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nMilestone.\n";
+
+    const message = finalizeMemoryCommit(
+      "Milestone",
+      commitContent,
+      state,
+      branches,
+      tmpDir
+    );
+
+    expect(message).toContain("**Action required:** Update `.memory/main.md`");
+  });
+
+  it("should suppress roadmap update reminder when update_roadmap is false", () => {
+    const commitContent =
+      "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nTrivial fix.\n";
+
+    const message = finalizeMemoryCommit(
+      "Trivial fix",
+      commitContent,
+      state,
+      branches,
+      tmpDir,
+      false
+    );
+
+    expect(message).not.toContain("**Action required:**");
+  });
 });

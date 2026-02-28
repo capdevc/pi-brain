@@ -8,6 +8,7 @@ import type {
   ExtensionContext,
   ToolDefinition,
 } from "@mariozechner/pi-coding-agent";
+import fc from "fast-check";
 
 import activate from "./index.js";
 
@@ -143,6 +144,25 @@ function createCtx(
   } as unknown as ExtensionContext;
 }
 
+function collectKeyPaths(value: unknown, prefix = ""): string[] {
+  if (value === null || typeof value !== "object") {
+    return [];
+  }
+
+  const entries: [string, unknown][] = Array.isArray(value)
+    ? value.map((entry, index) => [String(index), entry])
+    : Object.entries(value);
+
+  const paths: string[] = [];
+  for (const [key, child] of entries) {
+    const currentPath = prefix ? `${prefix}.${key}` : key;
+    paths.push(currentPath);
+    paths.push(...collectKeyPaths(child, currentPath));
+  }
+
+  return paths;
+}
+
 describe("extensionWiring", () => {
   it("should register 2 memory tools and required event handlers", () => {
     // Arrange
@@ -167,7 +187,7 @@ describe("extensionWiring", () => {
     expect(handlerNames).toContain("resources_discover");
   });
 
-  it('should constrain memory_branch "action" to create/switch/merge', () => {
+  it('should constrain memory_branch "action" to create/switch/merge using enum', () => {
     // Arrange
     const mockPi = createMockPi();
     activate(mockPi.api);
@@ -181,7 +201,8 @@ describe("extensionWiring", () => {
         parameters: {
           properties?: {
             action?: {
-              anyOf?: { const?: string }[];
+              enum?: string[];
+              anyOf?: unknown[];
             };
           };
         };
@@ -189,8 +210,39 @@ describe("extensionWiring", () => {
     ).parameters.properties?.action;
 
     // Assert
-    const actions = actionSchema?.anyOf?.map((item) => item.const);
-    expect(actions).toStrictEqual(["create", "switch", "merge"]);
+    expect(actionSchema?.enum).toStrictEqual(["create", "switch", "merge"]);
+    expect(actionSchema?.anyOf).toBeUndefined();
+  });
+
+  it('should keep memory_branch action schema free of "anyOf" and "const" keys', () => {
+    // Arrange
+    const mockPi = createMockPi();
+    activate(mockPi.api);
+
+    const memoryBranch = mockPi.tools.find((t) => t.name === "memory_branch");
+    expect(memoryBranch).toBeDefined();
+
+    const actionSchema = (
+      memoryBranch as {
+        parameters: {
+          properties?: {
+            action?: unknown;
+          };
+        };
+      }
+    ).parameters.properties?.action;
+
+    const keyPaths = collectKeyPaths(actionSchema);
+    expect(keyPaths.length).toBeGreaterThan(0);
+
+    // Act / Assert
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: keyPaths.length - 1 }), (index) => {
+        const segments = keyPaths[index]?.split(".") ?? [];
+        expect(segments).not.toContain("anyOf");
+        expect(segments).not.toContain("const");
+      })
+    );
   });
 
   it("should return tool result shape and guard when memory is uninitialized", async () => {

@@ -76,6 +76,20 @@ For deep retrieval, use `read` directly:
 A subagent handles commit distillation — it reads your `log.md` and prior commits,
 then produces the structured commit entry. You just provide a good `summary` string.
 
+## After Every Commit
+
+**Update `.memory/main.md` to reflect the current state.** The roadmap is the first
+thing a new session reads — if it's stale, every future session starts with a wrong
+picture. After `memory_commit` returns, review and update:
+
+- **Current State** section — reflect what's actually true now
+- **Key Decisions Made** — add any new decisions from this commit
+- **Milestones** — move completed items, add new planned ones
+
+For trivial commits that don't change the project's state, decisions, or milestones
+(e.g., minor refactors, typo fixes), you can pass `update_roadmap: false` to skip
+the reminder. Most commits should update the roadmap.
+
 ## When to Branch
 
 - You want to explore an alternative approach without contaminating current thinking
