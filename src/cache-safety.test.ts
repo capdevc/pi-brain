@@ -9,7 +9,10 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import fc from "fast-check";
 
+import { BranchManager } from "./branches.js";
 import activate from "./index.js";
+import { buildStatusView } from "./memory-context.js";
+import { MemoryState } from "./state.js";
 
 interface RegisteredHandler {
   event: string;
@@ -247,6 +250,50 @@ describe("cache safety invariants", () => {
         }
       }),
       { numRuns: 40 }
+    );
+  });
+
+  it("buildStatusView is deterministic for identical on-disk state", () => {
+    const branchNameArb = fc
+      .stringMatching(/^[a-z][a-z0-9-]{0,12}$/)
+      .filter((name) => name !== "main");
+
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(branchNameArb, { maxLength: 8 }),
+        fc.string(),
+        (extraBranches, roadmap) => {
+          const { projectDir, cleanup } = setupInitializedProject();
+          try {
+            fs.writeFileSync(
+              path.join(projectDir, ".memory", "main.md"),
+              `# Roadmap\n\n${roadmap}`
+            );
+
+            const branches = new BranchManager(projectDir);
+            for (const name of [...extraBranches].toReversed()) {
+              branches.createBranch(name, `Purpose ${name}`);
+            }
+
+            const state = new MemoryState(projectDir);
+            state.load();
+
+            const first = buildStatusView(state, branches, projectDir, {
+              compact: true,
+              branchLimit: 8,
+            });
+            const second = buildStatusView(state, branches, projectDir, {
+              compact: true,
+              branchLimit: 8,
+            });
+
+            expect(first).toBe(second);
+          } finally {
+            cleanup();
+          }
+        }
+      ),
+      { numRuns: 50 }
     );
   });
 });
