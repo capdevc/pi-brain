@@ -166,6 +166,8 @@ export function executeMemoryBranch(
     return result.text;
   }
 
-  const status = buildStatusView(state, branches, projectDir);
+  const status = buildStatusView(state, branches, projectDir, {
+    compact: true,
+  });
   return `${result.text}\n\n${status}`;
 }

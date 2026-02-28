@@ -22,6 +22,8 @@ import { extractCommitBlocks, spawnCommitter } from "./subagent.js";
 
 const MEMORY_NOT_INITIALIZED_MESSAGE =
   "Brain not initialized. Run brain-init.sh first.";
+const BEFORE_AGENT_START_ROADMAP_CHAR_LIMIT = 1200;
+const BEFORE_AGENT_START_BRANCH_LIMIT = 8;
 
 function createTextResult(text: string): AgentToolResult<unknown> {
   return {
@@ -49,6 +51,21 @@ function upsertCurrentSession(state: MemoryState, ctx: ExtensionContext): void {
     new Date().toISOString()
   );
   state.save();
+}
+
+function setBrainFooterStatus(
+  ctx: ExtensionContext,
+  state: MemoryState | null,
+  branchManager: BranchManager | null
+): void {
+  if (!state || !branchManager || !state.isInitialized) {
+    ctx.ui.setStatus("brain", undefined);
+    return;
+  }
+
+  const turnCount = branchManager.getLogTurnCount(state.activeBranch);
+  const turnLabel = `${turnCount} uncommitted turn${turnCount === 1 ? "" : "s"}`;
+  ctx.ui.setStatus("brain", `Brain: ${state.activeBranch} (${turnLabel})`);
 }
 
 function buildCompactionReminder(
@@ -110,9 +127,12 @@ export default function activate(pi: ExtensionAPI) {
     description:
       "Manage memory branches. Actions: create (new branch), switch (change active branch), merge (synthesize branch into current).",
     parameters: Type.Object({
-      action: Type.String({
-        description: 'Action to perform: "create", "switch", or "merge"',
-      }),
+      action: Type.Union(
+        [Type.Literal("create"), Type.Literal("switch"), Type.Literal("merge")],
+        {
+          description: 'Action to perform: "create", "switch", or "merge"',
+        }
+      ),
       name: Type.Optional(
         Type.String({ description: "Branch name (required for create)" })
       ),
@@ -130,13 +150,16 @@ export default function activate(pi: ExtensionAPI) {
         Type.String({ description: "Synthesized insight (required for merge)" })
       ),
     }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (
         !tryLoad(ctx) ||
         !isMemoryReady(state, branchManager) ||
         !branchManager
       ) {
-        return createTextResult(MEMORY_NOT_INITIALIZED_MESSAGE);
+        setBrainFooterStatus(ctx, state, branchManager);
+        return Promise.resolve(
+          createTextResult(MEMORY_NOT_INITIALIZED_MESSAGE)
+        );
       }
 
       const previousBranch = state.activeBranch;
@@ -146,7 +169,8 @@ export default function activate(pi: ExtensionAPI) {
         upsertCurrentSession(state, ctx);
       }
 
-      return createTextResult(result);
+      setBrainFooterStatus(ctx, state, branchManager);
+      return Promise.resolve(createTextResult(result));
     },
   });
 
@@ -164,6 +188,7 @@ export default function activate(pi: ExtensionAPI) {
         !isMemoryReady(state, branchManager) ||
         !branchManager
       ) {
+        setBrainFooterStatus(ctx, state, branchManager);
         return createTextResult(MEMORY_NOT_INITIALIZED_MESSAGE);
       }
 
@@ -192,6 +217,7 @@ export default function activate(pi: ExtensionAPI) {
         ctx.cwd
       );
 
+      setBrainFooterStatus(ctx, state, branchManager);
       return createTextResult(message);
     },
   });
@@ -203,12 +229,12 @@ export default function activate(pi: ExtensionAPI) {
     statusInjected = false;
 
     if (!state.isInitialized) {
+      setBrainFooterStatus(ctx, state, branchManager);
       return;
     }
 
     upsertCurrentSession(state, ctx);
 
-    const turnCount = branchManager.getLogTurnCount(state.activeBranch);
     const logSizeBytes = branchManager.getLogSizeBytes(state.activeBranch);
 
     if (logSizeBytes >= LOG_SIZE_WARNING_BYTES) {
@@ -219,9 +245,21 @@ export default function activate(pi: ExtensionAPI) {
       );
     }
 
-    const branch = state.activeBranch;
-    const turnLabel = `${turnCount} uncommitted turn${turnCount === 1 ? "" : "s"}`;
-    ctx.ui.setStatus("brain", `Brain: ${branch} (${turnLabel})`);
+    setBrainFooterStatus(ctx, state, branchManager);
+  });
+
+  pi.on("session_switch", (_event, ctx) => {
+    statusInjected = false;
+
+    state = new MemoryState(ctx.cwd);
+    state.load();
+    branchManager = new BranchManager(ctx.cwd);
+
+    if (state.isInitialized) {
+      upsertCurrentSession(state, ctx);
+    }
+
+    setBrainFooterStatus(ctx, state, branchManager);
   });
 
   pi.on("before_agent_start", (_event: BeforeAgentStartEvent, ctx) => {
@@ -239,7 +277,11 @@ export default function activate(pi: ExtensionAPI) {
 
     statusInjected = true;
 
-    const status = buildStatusView(state, branchManager, ctx.cwd);
+    const status = buildStatusView(state, branchManager, ctx.cwd, {
+      compact: true,
+      roadmapCharLimit: BEFORE_AGENT_START_ROADMAP_CHAR_LIMIT,
+      branchLimit: BEFORE_AGENT_START_BRANCH_LIMIT,
+    });
     return {
       message: {
         customType: "brain-status",
@@ -258,8 +300,9 @@ export default function activate(pi: ExtensionAPI) {
     skillPaths: [resolveSkillPath()],
   }));
 
-  pi.on("turn_end", (event) => {
+  pi.on("turn_end", (event, ctx) => {
     if (!isMemoryReady(state, branchManager) || !branchManager) {
+      setBrainFooterStatus(ctx, state, branchManager);
       return;
     }
 
@@ -270,6 +313,7 @@ export default function activate(pi: ExtensionAPI) {
 
     const entry = formatOtaEntry(input);
     branchManager.appendLog(state.activeBranch, entry);
+    setBrainFooterStatus(ctx, state, branchManager);
   });
 
   pi.on("session_before_compact", (event) => {

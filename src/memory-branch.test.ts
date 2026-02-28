@@ -292,6 +292,24 @@ describe("executeMemoryBranch", () => {
     expect(result).toContain("# Memory Status");
   });
 
+  it("should keep auto-appended status compact when roadmap is large", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, ".memory/main.md"),
+      `# Roadmap\n\n${"x".repeat(20_000)}`
+    );
+
+    const result = executeMemoryBranch(
+      { action: "create", name: "compact-test", purpose: "Testing" },
+      state,
+      branches,
+      tmpDir
+    );
+
+    expect(result).toContain("# Memory Status");
+    expect(result).toContain("Roadmap truncated");
+    expect(result.length).toBeLessThan(5000);
+  });
+
   it("should NOT include status view in error results", () => {
     const result = executeMemoryBranch(
       { action: "switch", branch: "nonexistent" },

@@ -43,7 +43,9 @@ already made, completed milestones, and planned work.
 
 Memory status is **automatically injected** at session start (via the
 `before_agent_start` hook) and appended to every successful `memory_branch` and
-`memory_commit` result. You do not need to call a separate tool to see status.
+`memory_commit` result. Automatic status is compact and may truncate long
+roadmaps, so keep the newest critical context near the top of `.memory/main.md`.
+You do not need to call a separate tool to see status.
 
 For deep retrieval, use `read` directly:
 

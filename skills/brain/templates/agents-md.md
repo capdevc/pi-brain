@@ -46,4 +46,4 @@ The latest commit always contains a self-contained summary of the full branch hi
 - **Decisions over details**: Capture "why", not "what" — git tracks file changes
 - **Rolling summaries**: Each commit re-synthesizes all prior progress
 - **No direct log.md writes**: The extension maintains log.md automatically
-- **Status is automatic**: Memory status is injected at session start and appended to tool results
+- **Status is automatic**: Memory status is injected at session start and appended to tool results (compact/truncated when large; use `read .memory/main.md` for full roadmap)

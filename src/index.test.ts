@@ -128,13 +128,17 @@ function getFirstText(result: AgentToolResult<unknown> | undefined): string {
   return first.text;
 }
 
-function createCtx(projectDir: string): ExtensionContext {
-  const ui = createMockUi();
+function createCtx(
+  projectDir: string,
+  options?: { ui?: MockUi; sessionFile?: string }
+): ExtensionContext {
+  const ui = options?.ui ?? createMockUi();
+  const sessionFile = options?.sessionFile ?? "/tmp/pi-session-test.jsonl";
   return {
     cwd: projectDir,
     ui,
     sessionManager: {
-      getSessionFile: () => "/tmp/pi-session-test.jsonl",
+      getSessionFile: () => sessionFile,
     },
   } as unknown as ExtensionContext;
 }
@@ -157,9 +161,36 @@ describe("extensionWiring", () => {
     expect(handlerNames).toContain("turn_end");
     expect(handlerNames).toContain("before_agent_start");
     expect(handlerNames).toContain("session_start");
+    expect(handlerNames).toContain("session_switch");
     expect(handlerNames).toContain("session_compact");
     expect(handlerNames).toContain("session_before_compact");
     expect(handlerNames).toContain("resources_discover");
+  });
+
+  it('should constrain memory_branch "action" to create/switch/merge', () => {
+    // Arrange
+    const mockPi = createMockPi();
+    activate(mockPi.api);
+
+    // Act
+    const memoryBranch = mockPi.tools.find((t) => t.name === "memory_branch");
+    expect(memoryBranch).toBeDefined();
+
+    const actionSchema = (
+      memoryBranch as {
+        parameters: {
+          properties?: {
+            action?: {
+              anyOf?: { const?: string }[];
+            };
+          };
+        };
+      }
+    ).parameters.properties?.action;
+
+    // Assert
+    const actions = actionSchema?.anyOf?.map((item) => item.const);
+    expect(actions).toStrictEqual(["create", "switch", "merge"]);
   });
 
   it("should return tool result shape and guard when memory is uninitialized", async () => {
@@ -331,6 +362,161 @@ describe("extensionWiring", () => {
       expect(ui.statuses.get("brain")).toContain("main");
     } finally {
       cleanup();
+    }
+  });
+
+  it("should clear footer status when session_start loads an uninitialized project", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    const uninitializedDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "memory-index-uninitialized-")
+    );
+
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ui = createMockUi();
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+
+      const initializedCtx = createCtx(projectDir, {
+        ui,
+        sessionFile: "/tmp/pi-session-initialized.jsonl",
+      });
+      await sessionStart?.({ type: "session_start" }, initializedCtx);
+      expect(ui.statuses.get("brain")).toContain("main");
+
+      const uninitializedCtx = createCtx(uninitializedDir, {
+        ui,
+        sessionFile: "/tmp/pi-session-uninitialized.jsonl",
+      });
+      await sessionStart?.({ type: "session_start" }, uninitializedCtx);
+
+      expect(ui.statuses.get("brain")).toBeUndefined();
+    } finally {
+      cleanup();
+      fs.rmSync(uninitializedDir, { recursive: true, force: true });
+    }
+  });
+
+  it("should refresh footer status after memory_branch switches branches", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ui = createMockUi();
+      const ctx = createCtx(projectDir, {
+        ui,
+        sessionFile: "/tmp/pi-session-footer-refresh.jsonl",
+      });
+
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      const memoryBranch = mockPi.tools.find((t) => t.name === "memory_branch");
+      await memoryBranch?.execute(
+        "tc-footer-refresh",
+        {
+          action: "create",
+          name: "feature-status",
+          purpose: "Check footer updates",
+        },
+        undefined,
+        undefined,
+        ctx
+      );
+
+      expect(ui.statuses.get("brain")).toContain("feature-status");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("should refresh footer status on session_switch for initialized project", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ui = createMockUi();
+      const ctx = createCtx(projectDir, {
+        ui,
+        sessionFile: "/tmp/pi-session-switch-refresh.jsonl",
+      });
+
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      const sessionSwitch = getHandler(mockPi.handlers, "session_switch");
+      const memoryBranch = mockPi.tools.find((t) => t.name === "memory_branch");
+
+      await sessionStart?.({ type: "session_start" }, ctx);
+      await memoryBranch?.execute(
+        "tc-switch-refresh",
+        {
+          action: "create",
+          name: "feature-switch",
+          purpose: "Check switch refresh",
+        },
+        undefined,
+        undefined,
+        ctx
+      );
+
+      ui.setStatus("brain", "Brain: stale (99 uncommitted turns)");
+
+      await sessionSwitch?.(
+        {
+          type: "session_switch",
+          reason: "resume",
+          previousSessionFile: "/tmp/previous-session.jsonl",
+        },
+        ctx
+      );
+
+      expect(ui.statuses.get("brain")).toContain("feature-switch");
+      expect(ui.statuses.get("brain")).toContain("0 uncommitted turns");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("should clear footer status on session_switch to an uninitialized project", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    const uninitializedDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "memory-index-switch-uninitialized-")
+    );
+
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ui = createMockUi();
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      const sessionSwitch = getHandler(mockPi.handlers, "session_switch");
+
+      const initializedCtx = createCtx(projectDir, {
+        ui,
+        sessionFile: "/tmp/pi-session-switch-initialized.jsonl",
+      });
+      await sessionStart?.({ type: "session_start" }, initializedCtx);
+      expect(ui.statuses.get("brain")).toContain("main");
+
+      const uninitializedCtx = createCtx(uninitializedDir, {
+        ui,
+        sessionFile: "/tmp/pi-session-switch-uninitialized.jsonl",
+      });
+      await sessionSwitch?.(
+        {
+          type: "session_switch",
+          reason: "new",
+          previousSessionFile: "/tmp/pi-session-switch-initialized.jsonl",
+        },
+        uninitializedCtx
+      );
+
+      expect(ui.statuses.get("brain")).toBeUndefined();
+    } finally {
+      cleanup();
+      fs.rmSync(uninitializedDir, { recursive: true, force: true });
     }
   });
 
@@ -531,6 +717,36 @@ describe("extensionWiring", () => {
     }
   });
 
+  it("should cap roadmap size in before_agent_start injection", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      fs.writeFileSync(
+        path.join(projectDir, ".memory", "main.md"),
+        `# Roadmap\n\n${"x".repeat(80_000)}`
+      );
+
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ctx = createCtx(projectDir);
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      await sessionStart?.({ type: "session_start" }, ctx);
+
+      const beforeStart = getHandler(mockPi.handlers, "before_agent_start");
+      const result = (await beforeStart?.(
+        { type: "before_agent_start", prompt: "hello", systemPrompt: "..." },
+        ctx
+      )) as { message?: { content: string } } | undefined;
+
+      expect(result).toBeDefined();
+      expect(result?.message?.content).toContain("Roadmap truncated");
+      expect(result?.message?.content).toContain("read .memory/main.md");
+      expect(result?.message?.content.length ?? 0).toBeLessThan(5000);
+    } finally {
+      cleanup();
+    }
+  });
+
   it("should NOT inject status on subsequent before_agent_start calls", async () => {
     const { projectDir, cleanup } = setupInitializedProject();
     try {
@@ -586,6 +802,46 @@ describe("extensionWiring", () => {
       await sessionStart?.({ type: "session_start" }, ctx);
 
       // Now it should inject again
+      const result3 = (await beforeStart?.(event, ctx)) as
+        | { message?: { content: string } }
+        | undefined;
+      expect(result3).toBeDefined();
+      expect(result3?.message?.content).toContain("# Memory Status");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("should re-inject status after session_switch resets the flag", async () => {
+    const { projectDir, cleanup } = setupInitializedProject();
+    try {
+      const mockPi = createMockPi();
+      activate(mockPi.api);
+
+      const ctx = createCtx(projectDir);
+      const sessionStart = getHandler(mockPi.handlers, "session_start");
+      const beforeStart = getHandler(mockPi.handlers, "before_agent_start");
+      const sessionSwitch = getHandler(mockPi.handlers, "session_switch");
+      const event = {
+        type: "before_agent_start",
+        prompt: "hello",
+        systemPrompt: "...",
+      };
+
+      await sessionStart?.({ type: "session_start" }, ctx);
+      await beforeStart?.(event, ctx);
+      const result2 = await beforeStart?.(event, ctx);
+      expect(result2).toBeUndefined();
+
+      await sessionSwitch?.(
+        {
+          type: "session_switch",
+          reason: "resume",
+          previousSessionFile: "/tmp/old-session.jsonl",
+        },
+        ctx
+      );
+
       const result3 = (await beforeStart?.(event, ctx)) as
         | { message?: { content: string } }
         | undefined;

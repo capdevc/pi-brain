@@ -57,6 +57,8 @@ export function finalizeMemoryCommit(
   state.save();
 
   const resultText = `Commit ${hash} written to branch "${branch}".`;
-  const status = buildStatusView(state, branches, projectDir);
+  const status = buildStatusView(state, branches, projectDir, {
+    compact: true,
+  });
   return `${resultText}\n\n${status}`;
 }

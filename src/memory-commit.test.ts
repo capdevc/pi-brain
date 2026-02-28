@@ -225,4 +225,28 @@ describe("finalizeMemoryCommit", () => {
     expect(message).toContain("# Memory Status");
     expect(message).toContain("Active branch: main");
   });
+
+  it("should keep auto-appended status compact when roadmap is large", () => {
+    // Arrange
+    fs.writeFileSync(
+      path.join(tmpDir, ".memory/main.md"),
+      `# Roadmap\n\n${"x".repeat(20_000)}`
+    );
+    const commitContent =
+      "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nFirst milestone.\n";
+
+    // Act
+    const message = finalizeMemoryCommit(
+      "First milestone",
+      commitContent,
+      state,
+      branches,
+      tmpDir
+    );
+
+    // Assert
+    expect(message).toContain("# Memory Status");
+    expect(message).toContain("Roadmap truncated");
+    expect(message.length).toBeLessThan(5000);
+  });
 });

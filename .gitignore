@@ -7,5 +7,6 @@ dist/
 .DS_Store
 coverage/
 .worktrees/
+.pi/tmp/
 
 .memory/branches/*/log.md
