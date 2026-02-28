@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import type {
   AgentToolResult,
+  BeforeAgentStartEvent,
   ExtensionAPI,
   ExtensionContext,
   SessionBeforeCompactEvent,
@@ -223,7 +224,7 @@ export default function activate(pi: ExtensionAPI) {
     ctx.ui.setStatus("brain", `Brain: ${branch} (${turnLabel})`);
   });
 
-  pi.on("before_agent_start", (_event, ctx) => {
+  pi.on("before_agent_start", (_event: BeforeAgentStartEvent, ctx) => {
     if (statusInjected) {
       return;
     }
@@ -243,7 +244,7 @@ export default function activate(pi: ExtensionAPI) {
       message: {
         customType: "brain-status",
         content: status,
-        display: "tool" as const,
+        display: true,
         details: {},
       },
     };

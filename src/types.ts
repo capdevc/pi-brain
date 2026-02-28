@@ -8,13 +8,6 @@ export interface OtaEntryInput {
   observations: string[];
 }
 
-export interface MemoryStatusParams {
-  level?: string;
-  branch?: string;
-  commit?: string;
-  segment?: string;
-}
-
 export interface SubagentResult {
   text: string;
   exitCode: number;
