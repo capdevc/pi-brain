@@ -1,5 +1,6 @@
 import type { BranchManager } from "./branches.js";
 import { generateHash } from "./hash.js";
+import { buildStatusView } from "./memory-context.js";
 import type { MemoryState } from "./state.js";
 import { buildCommitterTask } from "./subagent.js";
 
@@ -26,13 +27,14 @@ export function executeMemoryCommit(
 
 /**
  * Step 2: Write the agent's commit content to commits.md,
- * clear log.md, and update state.
+ * clear log.md, update state, and return result with status.
  */
 export function finalizeMemoryCommit(
   summary: string,
   commitContent: string,
   state: MemoryState,
-  branches: BranchManager
+  branches: BranchManager,
+  projectDir: string
 ): string {
   const branch = state.activeBranch;
   const hash = generateHash();
@@ -54,5 +56,7 @@ export function finalizeMemoryCommit(
   state.setLastCommit(branch, hash, timestamp, summary);
   state.save();
 
-  return `Commit ${hash} written to branch "${branch}".`;
+  const resultText = `Commit ${hash} written to branch "${branch}".`;
+  const status = buildStatusView(state, branches, projectDir);
+  return `${resultText}\n\n${status}`;
 }

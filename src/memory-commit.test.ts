@@ -116,7 +116,13 @@ describe("finalizeMemoryCommit", () => {
     ].join("\n");
 
     // Act
-    finalizeMemoryCommit("First milestone", commitContent, state, branches);
+    finalizeMemoryCommit(
+      "First milestone",
+      commitContent,
+      state,
+      branches,
+      tmpDir
+    );
 
     // Assert
     const commits = branches.readCommits("main");
@@ -131,7 +137,7 @@ describe("finalizeMemoryCommit", () => {
       "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nDone.\n";
 
     // Act
-    finalizeMemoryCommit("Done", commitContent, state, branches);
+    finalizeMemoryCommit("Done", commitContent, state, branches, tmpDir);
 
     // Assert
     expect(branches.readLog("main")).toBe("");
@@ -149,7 +155,8 @@ describe("finalizeMemoryCommit", () => {
       "Architecture decided",
       commitContent,
       state,
-      branches
+      branches,
+      tmpDir
     );
 
     // Assert
@@ -168,7 +175,13 @@ describe("finalizeMemoryCommit", () => {
     const before = fs.readFileSync(path.join(tmpDir, "AGENTS.md"), "utf8");
 
     // Act
-    finalizeMemoryCommit("New milestone", commitContent, state, branches);
+    finalizeMemoryCommit(
+      "New milestone",
+      commitContent,
+      state,
+      branches,
+      tmpDir
+    );
 
     // Assert
     const after = fs.readFileSync(path.join(tmpDir, "AGENTS.md"), "utf8");
@@ -181,11 +194,35 @@ describe("finalizeMemoryCommit", () => {
       "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nTest hash.\n";
 
     // Act
-    finalizeMemoryCommit("Test hash", commitContent, state, branches);
+    finalizeMemoryCommit("Test hash", commitContent, state, branches, tmpDir);
 
     // Assert
     const commits = branches.readCommits("main");
     const hashMatch = /## Commit ([a-f0-9]{8})/.exec(commits);
     expect(hashMatch).not.toBeNull();
+  });
+
+  it("should include status view in the result", () => {
+    // Arrange
+    fs.writeFileSync(
+      path.join(tmpDir, ".memory/main.md"),
+      "# Roadmap\n\nGoals here.\n"
+    );
+    const commitContent =
+      "### Branch Purpose\n\nMain\n\n### Previous Progress Summary\n\nNone.\n\n### This Commit's Contribution\n\nFirst milestone.\n";
+
+    // Act
+    const message = finalizeMemoryCommit(
+      "First milestone",
+      commitContent,
+      state,
+      branches,
+      tmpDir
+    );
+
+    // Assert
+    expect(message).toContain("Commit ");
+    expect(message).toContain("# Memory Status");
+    expect(message).toContain("Active branch: main");
   });
 });

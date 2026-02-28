@@ -40,7 +40,8 @@ describe("executeMemoryBranch", () => {
     const result = executeMemoryBranch(
       { action: "create", name: "explore-redis", purpose: "Evaluate Redis" },
       state,
-      branches
+      branches,
+      tmpDir
     );
 
     expect(result).toContain("explore-redis");
@@ -52,7 +53,8 @@ describe("executeMemoryBranch", () => {
     executeMemoryBranch(
       { action: "create", name: "explore-redis", purpose: "Evaluate Redis" },
       state,
-      branches
+      branches,
+      tmpDir
     );
 
     const commits = branches.readCommits("explore-redis");
@@ -63,14 +65,20 @@ describe("executeMemoryBranch", () => {
     const result = executeMemoryBranch(
       { action: "create", name: "main", purpose: "Duplicate" },
       state,
-      branches
+      branches,
+      tmpDir
     );
 
     expect(result).toContain("already exists");
   });
 
   it("should require name and purpose for create", () => {
-    const result = executeMemoryBranch({ action: "create" }, state, branches);
+    const result = executeMemoryBranch(
+      { action: "create" },
+      state,
+      branches,
+      tmpDir
+    );
 
     expect(result).toContain("required");
   });
@@ -83,7 +91,8 @@ describe("executeMemoryBranch", () => {
     const result = executeMemoryBranch(
       { action: "switch", branch: "feature-x" },
       state,
-      branches
+      branches,
+      tmpDir
     );
 
     expect(state.activeBranch).toBe("feature-x");
@@ -100,7 +109,8 @@ describe("executeMemoryBranch", () => {
     const result = executeMemoryBranch(
       { action: "switch", branch: "feature-x" },
       state,
-      branches
+      branches,
+      tmpDir
     );
 
     expect(result).toContain("Redis is viable.");
@@ -110,7 +120,8 @@ describe("executeMemoryBranch", () => {
     const result = executeMemoryBranch(
       { action: "switch", branch: "nope" },
       state,
-      branches
+      branches,
+      tmpDir
     );
 
     expect(result).toContain("not found");
@@ -118,7 +129,12 @@ describe("executeMemoryBranch", () => {
   });
 
   it("should require branch for switch", () => {
-    const result = executeMemoryBranch({ action: "switch" }, state, branches);
+    const result = executeMemoryBranch(
+      { action: "switch" },
+      state,
+      branches,
+      tmpDir
+    );
 
     expect(result).toContain("required");
   });
@@ -139,7 +155,8 @@ describe("executeMemoryBranch", () => {
         synthesis: "Redis confirmed as caching layer.",
       },
       state,
-      branches
+      branches,
+      tmpDir
     );
 
     expect(result).toContain("Merge commit");
@@ -152,7 +169,8 @@ describe("executeMemoryBranch", () => {
     const result = executeMemoryBranch(
       { action: "merge", branch: "main", synthesis: "Self merge." },
       state,
-      branches
+      branches,
+      tmpDir
     );
 
     expect(result).toContain("Cannot merge");
@@ -162,14 +180,20 @@ describe("executeMemoryBranch", () => {
     const result = executeMemoryBranch(
       { action: "merge", branch: "nonexistent", synthesis: "Missing." },
       state,
-      branches
+      branches,
+      tmpDir
     );
 
     expect(result).toContain("not found");
   });
 
   it("should require branch and synthesis for merge", () => {
-    const result = executeMemoryBranch({ action: "merge" }, state, branches);
+    const result = executeMemoryBranch(
+      { action: "merge" },
+      state,
+      branches,
+      tmpDir
+    );
 
     expect(result).toContain("required");
   });
@@ -185,7 +209,8 @@ describe("executeMemoryBranch", () => {
         synthesis: "Merged Redis findings.",
       },
       state,
-      branches
+      branches,
+      tmpDir
     );
 
     expect(state.lastCommit).not.toBeNull();
@@ -196,8 +221,86 @@ describe("executeMemoryBranch", () => {
   // --- invalid action ---
 
   it("should reject invalid action values", () => {
-    const result = executeMemoryBranch({ action: "delete" }, state, branches);
+    const result = executeMemoryBranch(
+      { action: "delete" },
+      state,
+      branches,
+      tmpDir
+    );
 
     expect(result).toContain("Unknown action");
+  });
+
+  // --- status appending ---
+
+  it("should include status view in create result", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, ".memory/main.md"),
+      "# Roadmap\n\nGoals.\n"
+    );
+
+    const result = executeMemoryBranch(
+      { action: "create", name: "test-branch", purpose: "Testing" },
+      state,
+      branches,
+      tmpDir
+    );
+
+    expect(result).toContain("Created branch");
+    expect(result).toContain("# Memory Status");
+    expect(result).toContain("Active branch: test-branch");
+  });
+
+  it("should include status view in switch result", () => {
+    branches.createBranch("feature-x", "Feature X");
+    fs.writeFileSync(
+      path.join(tmpDir, ".memory/main.md"),
+      "# Roadmap\n\nGoals.\n"
+    );
+
+    const result = executeMemoryBranch(
+      { action: "switch", branch: "feature-x" },
+      state,
+      branches,
+      tmpDir
+    );
+
+    expect(result).toContain("Switched to branch");
+    expect(result).toContain("# Memory Status");
+    expect(result).toContain("Active branch: feature-x");
+  });
+
+  it("should include status view in merge result", () => {
+    branches.createBranch("explore-redis", "Redis eval");
+    fs.writeFileSync(
+      path.join(tmpDir, ".memory/main.md"),
+      "# Roadmap\n\nGoals.\n"
+    );
+
+    const result = executeMemoryBranch(
+      {
+        action: "merge",
+        branch: "explore-redis",
+        synthesis: "Redis works.",
+      },
+      state,
+      branches,
+      tmpDir
+    );
+
+    expect(result).toContain("Merge commit");
+    expect(result).toContain("# Memory Status");
+  });
+
+  it("should NOT include status view in error results", () => {
+    const result = executeMemoryBranch(
+      { action: "switch", branch: "nonexistent" },
+      state,
+      branches,
+      tmpDir
+    );
+
+    expect(result).toContain("not found");
+    expect(result).not.toContain("# Memory Status");
   });
 });

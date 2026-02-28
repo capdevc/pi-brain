@@ -246,7 +246,8 @@ export default function activate(pi: ExtensionAPI) {
         params.summary,
         commitContent,
         state,
-        branchManager
+        branchManager,
+        ctx.cwd
       );
 
       return createTextResult(message);

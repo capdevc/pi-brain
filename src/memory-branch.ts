@@ -1,5 +1,6 @@
 import type { BranchManager } from "./branches.js";
 import { generateHash } from "./hash.js";
+import { buildStatusView } from "./memory-context.js";
 import type { MemoryState } from "./state.js";
 
 interface MemoryBranchParams {
@@ -10,41 +11,58 @@ interface MemoryBranchParams {
   synthesis?: string;
 }
 
+interface ActionResult {
+  text: string;
+  ok: boolean;
+}
+
 function executeCreate(
   params: MemoryBranchParams,
   state: MemoryState,
   branches: BranchManager
-): string {
+): ActionResult {
   const { name, purpose } = params;
 
   if (!name || !purpose) {
-    return '"name" and "purpose" are required for the create action.';
+    return {
+      text: '"name" and "purpose" are required for the create action.',
+      ok: false,
+    };
   }
 
   if (branches.branchExists(name)) {
-    return `Branch "${name}" already exists. Use action "switch" to switch to it.`;
+    return {
+      text: `Branch "${name}" already exists. Use action "switch" to switch to it.`,
+      ok: false,
+    };
   }
 
   branches.createBranch(name, purpose);
   state.setActiveBranch(name);
   state.save();
 
-  return `Created branch "${name}" and switched to it.\nPurpose: ${purpose}`;
+  return {
+    text: `Created branch "${name}" and switched to it.\nPurpose: ${purpose}`,
+    ok: true,
+  };
 }
 
 function executeSwitch(
   params: MemoryBranchParams,
   state: MemoryState,
   branches: BranchManager
-): string {
+): ActionResult {
   const { branch } = params;
 
   if (!branch) {
-    return '"branch" is required for the switch action.';
+    return { text: '"branch" is required for the switch action.', ok: false };
   }
 
   if (!branches.branchExists(branch)) {
-    return `Branch "${branch}" not found. Available branches: ${branches.listBranches().join(", ")}`;
+    return {
+      text: `Branch "${branch}" not found. Available branches: ${branches.listBranches().join(", ")}`,
+      ok: false,
+    };
   }
 
   state.setActiveBranch(branch);
@@ -53,28 +71,37 @@ function executeSwitch(
   const latest = branches.getLatestCommit(branch);
   const summary = latest ?? "No commits yet.";
 
-  return `Switched to branch "${branch}".\n\n${summary}`;
+  return { text: `Switched to branch "${branch}".\n\n${summary}`, ok: true };
 }
 
 function executeMerge(
   params: MemoryBranchParams,
   state: MemoryState,
   branches: BranchManager
-): string {
+): ActionResult {
   const { branch: sourceBranch, synthesis } = params;
 
   if (!sourceBranch || !synthesis) {
-    return '"branch" and "synthesis" are required for the merge action.';
+    return {
+      text: '"branch" and "synthesis" are required for the merge action.',
+      ok: false,
+    };
   }
 
   const targetBranch = state.activeBranch;
 
   if (sourceBranch === targetBranch) {
-    return `Cannot merge branch "${sourceBranch}" into itself.`;
+    return {
+      text: `Cannot merge branch "${sourceBranch}" into itself.`,
+      ok: false,
+    };
   }
 
   if (!branches.branchExists(sourceBranch)) {
-    return `Branch "${sourceBranch}" not found. Available branches: ${branches.listBranches().join(", ")}`;
+    return {
+      text: `Branch "${sourceBranch}" not found. Available branches: ${branches.listBranches().join(", ")}`,
+      ok: false,
+    };
   }
 
   const hash = generateHash();
@@ -98,30 +125,47 @@ function executeMerge(
   state.setLastCommit(targetBranch, hash, timestamp, summary);
   state.save();
 
-  return `Merge commit ${hash} written to branch "${targetBranch}" (merged from "${sourceBranch}").`;
+  return {
+    text: `Merge commit ${hash} written to branch "${targetBranch}" (merged from "${sourceBranch}").`,
+    ok: true,
+  };
 }
 
 /**
  * Execute the unified memory_branch tool.
  * Actions: create, switch, merge.
+ * On success, appends the current memory status view.
  */
 export function executeMemoryBranch(
   params: MemoryBranchParams,
   state: MemoryState,
-  branches: BranchManager
+  branches: BranchManager,
+  projectDir: string
 ): string {
+  let result: ActionResult;
+
   switch (params.action) {
     case "create": {
-      return executeCreate(params, state, branches);
+      result = executeCreate(params, state, branches);
+      break;
     }
     case "switch": {
-      return executeSwitch(params, state, branches);
+      result = executeSwitch(params, state, branches);
+      break;
     }
     case "merge": {
-      return executeMerge(params, state, branches);
+      result = executeMerge(params, state, branches);
+      break;
     }
     default: {
       return `Unknown action "${params.action}". Valid actions: create, switch, merge.`;
     }
   }
+
+  if (!result.ok) {
+    return result.text;
+  }
+
+  const status = buildStatusView(state, branches, projectDir);
+  return `${result.text}\n\n${status}`;
 }
