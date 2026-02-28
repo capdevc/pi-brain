@@ -2,6 +2,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import fc from "fast-check";
+
 import { BranchManager } from "./branches.js";
 import { LOG_SIZE_WARNING_BYTES } from "./constants.js";
 import { buildStatusView } from "./memory-context.js";
@@ -133,5 +135,131 @@ describe("buildStatusView", () => {
     expect(result).toContain("feature-a");
     expect(result).toContain("Added caching layer");
     expect(result).toContain("main");
+  });
+
+  it("compact mode should truncate roadmap iff it exceeds roadmapCharLimit", () => {
+    const roadmapCharLimit = 160;
+    const roadmapChunkArb = fc
+      .array(fc.constantFrom("a", "b", "c", "d", "e", " ", "\n", "#"), {
+        minLength: 1,
+        maxLength: 400,
+      })
+      .map((chars) => chars.join(""));
+
+    fc.assert(
+      fc.property(roadmapChunkArb, (roadmapChunk) => {
+        const roadmap = `# Roadmap\n\n${roadmapChunk}`;
+        fs.writeFileSync(path.join(tmpDir, ".memory/main.md"), roadmap);
+
+        const result = buildStatusView(state, branches, tmpDir, {
+          compact: true,
+          roadmapCharLimit,
+          branchLimit: 8,
+        });
+
+        const shouldTruncate = roadmap.trim().length > roadmapCharLimit;
+        expect(result.includes("Roadmap truncated")).toBe(shouldTruncate);
+      }),
+      { numRuns: 60 }
+    );
+  });
+
+  it("compact mode should cap visible branch rows and report hidden count", () => {
+    const branchLimit = 4;
+    const branchNameArb = fc
+      .array(
+        fc.constantFrom(
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f",
+          "g",
+          "h",
+          "i",
+          "j",
+          "k",
+          "l",
+          "m",
+          "n",
+          "o",
+          "p",
+          "q",
+          "r",
+          "s",
+          "t",
+          "u",
+          "v",
+          "w",
+          "x",
+          "y",
+          "z",
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "-"
+        ),
+        { minLength: 1, maxLength: 10 }
+      )
+      .map((chars) => chars.join(""))
+      .filter((name) => name !== "main");
+
+    const extraBranchesArb = fc.uniqueArray(branchNameArb, {
+      maxLength: 12,
+      selector: (name) => name,
+    });
+
+    fc.assert(
+      fc.property(extraBranchesArb, (extraBranches) => {
+        const setup = setupMemoryProject();
+        try {
+          fs.writeFileSync(
+            path.join(setup.tmpDir, ".memory/main.md"),
+            "# Roadmap\n\nCompact branch list validation.\n"
+          );
+
+          for (const branch of extraBranches) {
+            setup.branches.createBranch(branch, `Purpose ${branch}`);
+          }
+
+          const result = buildStatusView(
+            setup.state,
+            setup.branches,
+            setup.tmpDir,
+            {
+              compact: true,
+              branchLimit,
+            }
+          );
+
+          const visibleBranchRows = result.match(/^- \*\*/gm) ?? [];
+          const totalBranches = extraBranches.length + 1;
+          const expectedVisible = Math.min(totalBranches, branchLimit);
+          expect(visibleBranchRows).toHaveLength(expectedVisible);
+
+          const hiddenCount = totalBranches - expectedVisible;
+          const hiddenMessageMatch = result.match(
+            /^- \.\.\. \d+ more branch(?:es)? not shown\.$/m
+          );
+          const expectedHiddenMessage =
+            hiddenCount > 0
+              ? `- ... ${hiddenCount} more ${hiddenCount === 1 ? "branch" : "branches"} not shown.`
+              : null;
+
+          expect(hiddenMessageMatch?.[0] ?? null).toBe(expectedHiddenMessage);
+        } finally {
+          fs.rmSync(setup.tmpDir, { recursive: true, force: true });
+        }
+      }),
+      { numRuns: 40 }
+    );
   });
 });
