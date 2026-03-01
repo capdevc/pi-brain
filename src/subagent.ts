@@ -6,21 +6,141 @@ import * as path from "node:path";
 import type { SubagentResult } from "./types.js";
 import { parseYaml } from "./yaml.js";
 
-const COMMITTER_MODEL = "google-antigravity/gemini-3-flash";
+const DEFAULT_COMMITTER_MODEL = "openai/gpt-5.3-codex";
 const COMMITTER_TOOLS = "read,grep,find,ls";
+
+const THINKING_LEVELS = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+] as const;
+
+type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 interface AgentDefinition {
   prompt: string;
-  model: string;
   tools: string;
   skills: string;
   extensions: string;
 }
 
+interface BrainSettings {
+  committerModel?: string;
+  committerThinking?: ThinkingLevel;
+}
+
+interface CommitterConfig {
+  model: string;
+  thinking?: ThinkingLevel;
+}
+
+function asNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function asThinkingLevel(value: unknown): ThinkingLevel | undefined {
+  const normalized = asNonEmptyString(value);
+  if (!normalized) {
+    return undefined;
+  }
+
+  return THINKING_LEVELS.includes(normalized as ThinkingLevel)
+    ? (normalized as ThinkingLevel)
+    : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readJsonFile(filePath: string): unknown {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function extractBrainSettings(rawSettings: unknown): BrainSettings {
+  if (!isRecord(rawSettings)) {
+    return {};
+  }
+
+  const { brain } = rawSettings;
+  if (!isRecord(brain)) {
+    return {};
+  }
+
+  return {
+    committerModel: asNonEmptyString(brain.committerModel),
+    committerThinking: asThinkingLevel(brain.committerThinking),
+  };
+}
+
+function readBrainSettings(settingsPath: string): BrainSettings {
+  return extractBrainSettings(readJsonFile(settingsPath));
+}
+
+export function resolveCommitterConfig(
+  cwd: string,
+  homeDir = os.homedir()
+): CommitterConfig {
+  const globalSettings = readBrainSettings(
+    path.join(homeDir, ".pi", "agent", "settings.json")
+  );
+  const projectSettings = readBrainSettings(
+    path.join(cwd, ".pi", "settings.json")
+  );
+
+  return {
+    model:
+      projectSettings.committerModel ??
+      globalSettings.committerModel ??
+      DEFAULT_COMMITTER_MODEL,
+    thinking:
+      projectSettings.committerThinking ?? globalSettings.committerThinking,
+  };
+}
+
+export function parseAgentDefinition(content: string): AgentDefinition {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+  let frontmatter = "";
+  let prompt = content.trim();
+
+  if (match) {
+    const [, matchedFrontmatter, matchedPrompt] = match;
+    frontmatter = matchedFrontmatter;
+    prompt = matchedPrompt.trim();
+  }
+
+  let parsed: Record<string, unknown> = {};
+  if (frontmatter) {
+    try {
+      parsed = parseYaml(frontmatter) as Record<string, unknown>;
+    } catch {
+      // Ignore parse errors, fallback to defaults
+    }
+  }
+
+  return {
+    prompt,
+    tools: asNonEmptyString(parsed.tools) ?? COMMITTER_TOOLS,
+    skills: asNonEmptyString(parsed.skills) ?? "",
+    extensions: asNonEmptyString(parsed.extensions) ?? "",
+  };
+}
+
 /**
  * Resolve the memory-committer agent definition from the agent definition file.
  * Checks multiple locations to support both local development and npm installs.
- * Parses the YAML frontmatter for properties and uses the body as the system prompt.
  */
 function resolveAgentPrompt(): AgentDefinition {
   const currentFile = new URL(import.meta.url).pathname;
@@ -39,36 +159,7 @@ function resolveAgentPrompt(): AgentDefinition {
   for (const agentFile of candidates) {
     try {
       const content = fs.readFileSync(agentFile, "utf8");
-
-      const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
-      let frontmatter = "";
-      let prompt = content.trim();
-
-      if (match) {
-        const [, matchedFrontmatter, matchedPrompt] = match;
-        frontmatter = matchedFrontmatter;
-        prompt = matchedPrompt.trim();
-      }
-
-      let parsed: Record<string, unknown> = {};
-      if (frontmatter) {
-        try {
-          parsed = parseYaml(frontmatter) as Record<string, unknown>;
-        } catch {
-          // Ignore parse errors, fallback to defaults
-        }
-      }
-
-      return {
-        prompt,
-        model:
-          typeof parsed.model === "string" ? parsed.model : COMMITTER_MODEL,
-        tools:
-          typeof parsed.tools === "string" ? parsed.tools : COMMITTER_TOOLS,
-        skills: typeof parsed.skills === "string" ? parsed.skills : "",
-        extensions:
-          typeof parsed.extensions === "string" ? parsed.extensions : "",
-      };
+      return parseAgentDefinition(content);
     } catch {
       continue;
     }
@@ -209,6 +300,42 @@ function writePromptToTempFile(prompt: string): {
   return { dir: tmpDir, filePath };
 }
 
+export function buildCommitterArgs(
+  task: string,
+  agentDef: AgentDefinition,
+  config: CommitterConfig
+): string[] {
+  const args = ["--mode", "json", "--no-session", "--model", config.model];
+
+  if (config.thinking) {
+    args.push("--thinking", config.thinking);
+  }
+
+  args.push("--tools", agentDef.tools, "-p", `Task: ${task}`);
+
+  if (agentDef.skills) {
+    const skills = agentDef.skills
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const skill of skills) {
+      args.push("--skill", skill);
+    }
+  }
+
+  if (agentDef.extensions) {
+    const exts = agentDef.extensions
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean);
+    for (const ext of exts) {
+      args.push("--extension", ext);
+    }
+  }
+
+  return args;
+}
+
 export function spawnCommitter(
   cwd: string,
   task: string,
@@ -230,37 +357,8 @@ export function spawnCommitter(
       return;
     }
 
-    const args = [
-      "--mode",
-      "json",
-      "--no-session",
-      "--model",
-      agentDef.model,
-      "--tools",
-      agentDef.tools,
-      "-p",
-      `Task: ${task}`,
-    ];
-
-    if (agentDef.skills) {
-      const skills = agentDef.skills
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      for (const skill of skills) {
-        args.push("--skill", skill);
-      }
-    }
-
-    if (agentDef.extensions) {
-      const exts = agentDef.extensions
-        .split(",")
-        .map((e) => e.trim())
-        .filter(Boolean);
-      for (const ext of exts) {
-        args.push("--extension", ext);
-      }
-    }
+    const config = resolveCommitterConfig(cwd);
+    const args = buildCommitterArgs(task, agentDef, config);
 
     let tmpPromptDir: string | null = null;
     let tmpPromptPath: string | null = null;

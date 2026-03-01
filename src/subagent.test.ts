@@ -1,9 +1,16 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
 import fc from "fast-check";
 
 import {
+  buildCommitterArgs,
   buildCommitterTask,
   extractCommitBlocks,
   extractFinalText,
+  parseAgentDefinition,
+  resolveCommitterConfig,
 } from "./subagent.js";
 
 // Helpers
@@ -97,6 +104,183 @@ describe("buildCommitterTask", () => {
 
     expect(task).toContain("feature/auth-fix");
     expect(task).toContain(".memory/branches/feature/auth-fix/log.md");
+  });
+});
+
+describe("parseAgentDefinition", () => {
+  it("should parse tools/skills/extensions and ignore model frontmatter", () => {
+    const definition = parseAgentDefinition(
+      [
+        "---",
+        "name: memory-committer",
+        "model: google-antigravity/gemini-3-flash",
+        "tools: read,grep,find,ls",
+        "skills: brain",
+        "extensions:",
+        "---",
+        "Prompt body",
+      ].join("\n")
+    );
+
+    expect(definition.tools).toBe("read,grep,find,ls");
+    expect(definition.skills).toBe("brain");
+    expect(definition.prompt).toContain("Prompt body");
+  });
+});
+
+describe("resolveCommitterConfig", () => {
+  function writeSettings(
+    projectDir: string,
+    homeDir: string,
+    projectSettings?: string,
+    globalSettings?: string
+  ): void {
+    if (projectSettings !== undefined) {
+      const projectSettingsPath = path.join(projectDir, ".pi", "settings.json");
+      fs.mkdirSync(path.dirname(projectSettingsPath), { recursive: true });
+      fs.writeFileSync(projectSettingsPath, projectSettings);
+    }
+
+    if (globalSettings !== undefined) {
+      const globalSettingsPath = path.join(
+        homeDir,
+        ".pi",
+        "agent",
+        "settings.json"
+      );
+      fs.mkdirSync(path.dirname(globalSettingsPath), { recursive: true });
+      fs.writeFileSync(globalSettingsPath, globalSettings);
+    }
+  }
+
+  it("should default model to openai/gpt-5.3-codex", () => {
+    const projectDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "committer-config-")
+    );
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "committer-home-"));
+
+    try {
+      const config = resolveCommitterConfig(projectDir, homeDir);
+      expect(config.model).toBe("openai/gpt-5.3-codex");
+      expect(config.thinking).toBeUndefined();
+    } finally {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  });
+
+  it("should read model from project .pi/settings.json", () => {
+    const projectDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "committer-config-")
+    );
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "committer-home-"));
+
+    try {
+      writeSettings(
+        projectDir,
+        homeDir,
+        JSON.stringify({
+          brain: { committerModel: "anthropic/claude-sonnet-4" },
+        })
+      );
+
+      const config = resolveCommitterConfig(projectDir, homeDir);
+      expect(config.model).toBe("anthropic/claude-sonnet-4");
+    } finally {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  });
+
+  it("should let project settings override global settings", () => {
+    const projectDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "committer-config-")
+    );
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "committer-home-"));
+
+    try {
+      writeSettings(
+        projectDir,
+        homeDir,
+        JSON.stringify({
+          brain: { committerModel: "openai/gpt-5.3-codex" },
+        }),
+        JSON.stringify({
+          brain: { committerModel: "google/gemini-2.5-pro" },
+        })
+      );
+
+      const config = resolveCommitterConfig(projectDir, homeDir);
+      expect(config.model).toBe("openai/gpt-5.3-codex");
+    } finally {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  });
+
+  it("should read optional committerThinking from settings", () => {
+    const projectDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "committer-config-")
+    );
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "committer-home-"));
+
+    try {
+      writeSettings(
+        projectDir,
+        homeDir,
+        JSON.stringify({
+          brain: {
+            committerModel: "openai/gpt-5.3-codex",
+            committerThinking: "high",
+          },
+        })
+      );
+
+      const config = resolveCommitterConfig(projectDir, homeDir);
+      expect(config.thinking).toBe("high");
+    } finally {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("buildCommitterArgs", () => {
+  it("should include configured model", () => {
+    const args = buildCommitterArgs(
+      "Task",
+      {
+        prompt: "Prompt",
+        tools: "read,grep,find,ls",
+        skills: "brain",
+        extensions: "",
+      },
+      {
+        model: "openai/gpt-5.3-codex",
+      }
+    );
+
+    expect(args).toContain("--model");
+    expect(args).toContain("openai/gpt-5.3-codex");
+  });
+
+  it("should include optional thinking when configured", () => {
+    const args = buildCommitterArgs(
+      "Task",
+      {
+        prompt: "Prompt",
+        tools: "read,grep,find,ls",
+        skills: "brain",
+        extensions: "",
+      },
+      {
+        model: "openai/gpt-5.3-codex",
+        thinking: "medium",
+      }
+    );
+
+    expect(args).toContain("--thinking");
+    expect(args).toContain("medium");
   });
 });
 

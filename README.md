@@ -42,6 +42,29 @@ Brain adds five tools and a few lifecycle hooks to pi. The design is simple: the
 
 For deep retrieval, the agent uses pi's built-in `read` tool on `.memory/` files directly. No special API needed.
 
+## Committer Model Configuration
+
+Brain reads committer settings from pi settings JSON (project overrides global):
+
+- Project: `.pi/settings.json`
+- Global: `~/.pi/agent/settings.json`
+
+Use the `brain` namespace:
+
+```json
+{
+  "brain": {
+    "committerModel": "openai/gpt-5.3-codex",
+    "committerThinking": "medium"
+  }
+}
+```
+
+- `committerModel` (string): model used by the `memory_commit` distillation subagent.
+- `committerThinking` (optional): `off`, `minimal`, `low`, `medium`, `high`, `xhigh`.
+
+If `committerModel` is not set, Brain defaults to `openai/gpt-5.3-codex`.
+
 ## Prompt Cache Safety
 
 LLM providers cache the prefix of each request. If the prefix changes between turns, the cache misses and you pay full latency and cost. Many memory systems break this by injecting dynamic state into the system prompt.
